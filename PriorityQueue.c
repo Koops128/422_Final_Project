@@ -26,7 +26,7 @@ PQPtr pqConstructor()
 	int i;
 	for(i = 0; i < PRIORITY_LEVELS; i++)
 	{
-		fQ * fq = createfQ();   //MODIFIED
+		FifoQueue * fq = fifoQueueConstructor();   //MODIFIED
 		pq->priorityArray[i] = fq;
 		//pq->priorityArray[i] = NULL;
 	}
@@ -41,7 +41,7 @@ void pqDestructor(PQPtr this)
 	{
 		if(this->priorityArray[i] != NULL)
 		{
-			fQDestructor(this->priorityArray[i]);
+			fifoQueueDestructor(this->priorityArray[i]);
 		}
 	}
 	free(this);
@@ -50,7 +50,7 @@ void pqDestructor(PQPtr this)
 
 void pqEnqueue(PQPtr this, PcbPtr pcb)
 {
-	fifoEnqueue(this->priorityArray[pcb->priority], pcb);
+	fifoQueueEnqueue(this->priorityArray[PCBGetPriority(pcb)], pcb);
 }
 
 PcbPtr pqDequeue(PQPtr this)
@@ -60,12 +60,12 @@ PcbPtr pqDequeue(PQPtr this)
 	for(i = 0; i < PRIORITY_LEVELS; i++)
 	{
 		//++++++++++++MODIFIED START++++++++++++
-	    	PcbStr *fifoFirst = fifoPeek(this->priorityArray[i]);
+	    	PcbPtr fifoFirst = fifoQueuePeek(this->priorityArray[i]);
 		//if(this->priorityArray[i] != NULL)
 		if (fifoFirst != NULL)
             	//++++++++++++MODIFIED END++++++++++++
 		{
-			retval = fifoDequeue(this->priorityArray[i]);
+			retval = fifoQueueDequeue(this->priorityArray[i]);
 			break;
 		}
 	}
@@ -80,13 +80,13 @@ PcbPtr pqPeek(PQPtr this)
 	{
 		//if(this->priorityArray[i] != NULL)
 		//++++++++++++MODIFIED START++++++++++++
-	    	PcbStr *fifoFirst = fifoPeek(this->priorityArray[i]);
+	    	PcbPtr fifoFirst = fifoQueuePeek(this->priorityArray[i]);
 		//if(this->priorityArray[i] != NULL)
 		if (fifoFirst != NULL)
             	//++++++++++++MODIFIED END++++++++++++
 		{
 			//return this->priorityArray[i];
-			return fifoPeek(this->priorityArray[i]);
+			return fifoQueuePeek(this->priorityArray[i]);
 		}
 	}
 	return NULL;
@@ -96,7 +96,7 @@ bool pqIsEmpty(PQPtr this)
 {
 	int i;
 	for(i = 0; i < PRIORITY_LEVELS; i++) {
-        PcbStr *fifoFirst = fifoPeek(this->priorityArray[i]);
+        PcbPtr fifoFirst = fifoQueuePeek(this->priorityArray[i]);
 		if (fifoFirst != NULL)
 		{
 			if(this->priorityArray[i] != NULL)
@@ -123,10 +123,10 @@ char* pqToString(PQPtr this)
 		strncat(result, qLabel, labelLen);
 		//free(qLabel);
 
-		PcbStr *fifoFirst = fifoPeek(this->priorityArray[i]);
+		PcbPtr fifoFirst = fifoQueuePeek(this->priorityArray[i]);
 		if (fifoFirst != NULL)
 		{
-			char* fifoString = fifoToString(this->priorityArray[i]);
+			char* fifoString = fifoQueueToString(this->priorityArray[i]);
 			int fifoLength = strlen(fifoString);
 			int length = qLabelLength + fifoLength + 1; // +1 for \n at the end
 
@@ -139,51 +139,3 @@ char* pqToString(PQPtr this)
 
 	return result;
 }
-
-
-
-/*
-char* pqToString(PQPtr this)
-{
-	char* result = NULL;
-	int bufferSize = 0;
-	
-	int qLabelLength = 4;
-	char qLabel [qLabelLength];
-	qLabel[0] = 'Q';
-	// qLabel[1] will be the index i in the following loop
-	qLabel[2] = ':';
-	qLabel[3] = ' ';
-	
-	int i;
-	for(i = 0; i < PRIORITY_LEVELS; i++)
-	{
-		qLabel[1] = i;
-		
-		if(this->priorityArray[i] != NULL)
-		{
-			char* fifoString = fifoToString(this->priorityArray[i]);
-			int fifoLength = strlen(fifoString);
-			int length = qLabelLength + fifoLength + 1; // +1 for \n at the end
-			
-			if(result == NULL)
-			{
-				bufferSize = length + 1;	// +1 for \0 at the end
-				result = (char*) malloc(bufferSize);
-				strncpy(result, qLabel, qLabelLength);
-			}
-			else
-			{
-				bufferSize += length;
-				result = (char*) realloc(result, bufferSize);
-				strncat(result, qLabel, qLabelLength);
-			}
-			
-			strncat(result, fifoString, fifoLength);
-			strncat(result, "\n", 1);
-		}
-	}
-	
-	return result;
-}
-*/
