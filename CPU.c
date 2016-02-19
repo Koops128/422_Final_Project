@@ -19,6 +19,8 @@
 #include <time.h>
 #include "Pcb.h"
 #include "Fifo.h"
+#include "Device.h"
+#include "Mutex.h"
 
 //defines
 #define TIMER_INTERRUPT 1
@@ -31,22 +33,6 @@
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
 
-typedef struct {
-	FifoQueue* waitQ;
-	int counter;
-} Device;
-
-Device* IODeviceConstructor() {
-	Device* device = (Device*) malloc(sizeof(Device));
-	device->waitQ = fifoQueueConstructor();
-	device->counter = -1;
-	return device;
-}
-
-void IODeviceDestructor(Device* device) {
-	fifoQueueDestructor(&device->waitQ);
-	free(device);
-}
 
 //Global variables
 int currPID; //The number of processes created so far. The latest process has this as its ID.
