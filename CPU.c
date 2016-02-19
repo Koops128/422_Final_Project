@@ -21,6 +21,7 @@
 #include "Fifo.h"
 #include "Device.h"
 #include "Mutex.h"
+#include "PriorityQueue.h"
 
 //defines
 #define TIMER_INTERRUPT 1
