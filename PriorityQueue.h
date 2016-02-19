@@ -7,12 +7,12 @@
 #include "Fifo.h"
 #include "Pcb.h"
 
-#define PRIORITY_LEVELS 16
+#define PRIORITY_LEVELS 4
 
 // Priority Queue ADT
-typedef struct 
+typedef struct
 {
-	fQ * priorityArray[PRIORITY_LEVELS];
+	FifoQueue * priorityArray[PRIORITY_LEVELS];
 } PQStr;
 typedef PQStr* PQPtr;
 
