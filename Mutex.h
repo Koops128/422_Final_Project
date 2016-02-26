@@ -19,4 +19,8 @@ Mutex* MutexConstructor();
 
 void MutexDestructor(Mutex* mutex);
 
+void MutexLock(Mutex* mutex, PcbPtr pcb);
+
+void MutexUnlock(Mutex* mutex, PcbPtr pcb);
+
 #endif /* MUTEX_H_ */
