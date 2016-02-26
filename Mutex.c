@@ -24,3 +24,11 @@ void MutexDestructor(Mutex* mutex) {
 	free(mutex);
 	mutex = NULL;	//locally
 }
+
+void MutexLock(Mutex* mutex, PcbPtr pcb) {
+	//TODO
+}
+
+void MutexUnlock(Mutex* mutex, PcbPtr pcb) {
+	//TODO
+}
