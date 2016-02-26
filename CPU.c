@@ -345,8 +345,8 @@ int main(void) {
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = fifoQueueConstructor();
 	terminatedProcesses = fifoQueueConstructor();
-	device1 = IODeviceConstructor();
-	device2 = IODeviceConstructor();
+	device1 = DeviceConstructor();
+	device2 = DeviceConstructor();
 
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
@@ -368,8 +368,8 @@ int main(void) {
 	fifoQueueDestructor(&readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
-	IODeviceDestructor(device1);
-	IODeviceDestructor(device2);
+	DeviceDestructor(device1);
+	DeviceDestructor(device2);
 
 	printf("End of simulation\r\n");
 	return 0;

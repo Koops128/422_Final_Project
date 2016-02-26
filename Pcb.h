@@ -17,6 +17,8 @@
 #ifndef PCB_H_
 #define PCB_H_
 
+#include "ProducerConsumer.h"
+
 #define NUM_IO_TRAPS 4
 
 typedef enum {
@@ -30,6 +32,8 @@ typedef enum {
 
 
 typedef struct PCB* PcbPtr;
+
+PcbPtr ProducerConsumerPCBConstructor(PC *procon);
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);

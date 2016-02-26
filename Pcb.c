@@ -25,6 +25,9 @@ const char* stateNames[] = {"Created","Running","Ready","Interrupted","Blocked",
 typedef struct PCB {
 	int PID;
 	int priority;
+	PC *myPC;
+	//MR myMR; TODO
+	int starveFlag;
 	State state;
 	unsigned int PC;
 	unsigned int maxPC;
@@ -36,6 +39,12 @@ typedef struct PCB {
 	unsigned int IO_2_Traps[NUM_IO_TRAPS];
 } PcbStr;
 
+PcbPtr ProducerConsumerPCBConstructor(PC *procon){
+	PcbStr* pcb = PCBConstructor();
+	pcb->myPC = procon;
+	//pcb->myMR = NULL;
+	return pcb;
+}
 
 unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
 	if (index < NUM_IO_TRAPS) {
