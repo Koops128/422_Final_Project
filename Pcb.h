@@ -35,6 +35,10 @@ typedef struct PCB* PcbPtr;
 
 PcbPtr ProducerConsumerPCBConstructor(PC *procon);
 
+//JUST ADDING METHOD STUBS FOR NOW
+PcbPtr ProducerPCBConstructor(ProConPtr procon);
+PcbPtr ConsumerPCBConstructor(ProConPtr procon);
+
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
 
