@@ -46,6 +46,19 @@ PcbPtr ProducerConsumerPCBConstructor(PC *procon){
 	return pcb;
 }
 
+
+PcbPtr ProducerPCBConstructor(ProConPtr procon) {
+	PcbStr* pcb = PCBConstructor();
+	//todo stuff
+	return pcb;
+}
+PcbPtr ConsumerPCBConstructor(ProConPtr procon) {
+	PcbStr* pcb = PCBConstructor();
+	//todo stuff
+	return pcb;
+}
+
+
 unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
 	if (index < NUM_IO_TRAPS) {
 		return pcb->IO_1_Traps[index];
