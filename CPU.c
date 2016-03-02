@@ -290,6 +290,61 @@ void genProducerConsumerPair() {
 
 	//hardcode the step instruction arrays
 		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
+	setPCTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
+	setPCTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
+
+	//Create the ProducerConsumer object
+	ProConPtr procon = ProducerConsumerConstructor(ProducerMutexLock, ConsumerMutexLock,
+												   ProducerMutexUnlock, ConsumerMutexUnlock,
+												   ProducerCondVarWait, ConsumerCondVarWait,
+												   ProducerCondVarSignal, ConsumerCondVarSignal);
+
+	//Create the producer and consumer PCB using the special PCB constructors
+	PcbPtr producer = ProducerPCBConstructor(procon);
+	PcbPtr consumer = ConsumerPCBConstructor(procon);
+
+	//set the procon object's producer and consumer PCBs
+	ProConSetProducer(producer, procon);
+	ProConSetConsumer(consumer, procon);
+
+}
+
+/*Helper method for genProducerConsumerPair*/
+void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
+	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
+	int partitionSize = (MAX_PC - 1) / 4;
+	int i;
+	for(i = 0; i < 4; i++) {
+		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
+		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
+			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
+		}
+	}
+	lock[0] = LockUnlock[0];
+	lock[1] = LockUnlock[2];
+	unlock[0] = LockUnlock[1];
+	unlock[1] = LockUnlock[3];
+		//The wait instruction is somewhere between the first lock/unlock pair
+		//the signal instruction is somewhere between the second lock/unlock pair
+	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
+	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
+
+	free(LockUnlock);
+}
+
+void genProducerConsumerPair() {
+	//create the arrays we need
+	unsigned int* ProducerMutexLock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
+	unsigned int* ConsumerMutexLock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
+	unsigned int* ProducerMutexUnlock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
+	unsigned int* ConsumerMutexUnlock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
+	unsigned int* ProducerCondVarWait = malloc(sizeof(unsigned int) * PRO_WAIT);
+	unsigned int* ConsumerCondVarWait = malloc(sizeof(unsigned int) * CON_WAIT);
+	unsigned int* ProducerCondVarSignal = malloc(sizeof(unsigned int) * PRO_SIGNAL);
+	unsigned int* ConsumerCondVarSignal = malloc(sizeof(unsigned int) * CON_SIGNAL);
+
+	//hardcode the step instruction arrays
+		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
 	setLockUnlockTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
 	setLockUnlockTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
 
