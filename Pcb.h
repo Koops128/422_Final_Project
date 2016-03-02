@@ -17,9 +17,18 @@
 #ifndef PCB_H_
 #define PCB_H_
 
-#include "ProducerConsumer.h"
+//#include "ProdConsObj.h"
 
 #define NUM_IO_TRAPS 4
+
+//PRODUCER CONSUMER DEFINES
+#define PRO_LOCK_UNLOCK 1
+#define CON_LOCK_UNLOCK 1
+#define PRO_WAIT 1
+#define CON_WAIT 1
+#define PRO_SIGNAL 1
+#define CON_SIGNAL 1
+#define MAX_SHARED_SIZE 5
 
 typedef enum {
 	created=0,
@@ -33,7 +42,10 @@ typedef enum {
 
 typedef struct PCB* PcbPtr;
 
-PcbPtr ProducerConsumerPCBConstructor(PC *procon);
+//ADDING PRODUCER CONSUMER OBJECT HERE
+typedef struct ProducerConsumer* ProConPtr;
+
+PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon);
 
 //JUST ADDING METHOD STUBS FOR NOW
 PcbPtr ProducerPCBConstructor(ProConPtr procon);
@@ -116,5 +128,16 @@ char *PCBToString(PcbPtr pcb);
  * Deallocates all memory references that are kept within the PCB, and then frees the PCB passed in.
  */
 void PCBDestructor(PcbPtr pcb);
+
+//ADDING PRODUCERCONSUMER FUNCTIONS HERE
+ProConPtr ProducerConsumerConstructor(PcbPtr prod, PcbPtr cons,
+		unsigned int proLock[], unsigned int conLock[],
+		unsigned int proUnlock[], unsigned int conUnlock[],
+		unsigned int proWait[], unsigned int conWait[],
+		unsigned int proSig[], unsigned int conSig[]);
+
+int Wait(ProConPtr procon, PcbPtr waiter);
+
+PcbPtr Signal(ProConPtr procon, PcbPtr signaler);
 
 #endif /* PCB_H_ */
