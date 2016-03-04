@@ -23,10 +23,33 @@
 
 const char* stateNames[] = {"Created","Running","Ready","Interrupted","Blocked","Terminated"};
 
+const char* relationshipType[] = {"None", "Producer", "Consumer", "MutrecA", "MutrecB"};
+
 typedef struct PCB {
 	int PID;
 	int priority;
-	ProConPtr *myPC;
+
+	struct {
+		RelationshipType mType;
+		PcbPtr mPartner;
+		union {
+			struct mutRecPairSteps* mrSteps;
+			struct prodConsPairSteps* pcSteps;
+		} Steps;
+	}RelationshipStr;
+
+	union {
+		struct {
+			MutexPtr mutex1;
+			MutexPtr mutex2;
+		} MRDataStr;
+		struct {
+			MutexPtr mutex;
+			//condition var 1
+			//condition var 2
+		} PRDataStr;
+	} PairDataStr;
+
 	//MR myMR; TODO
 	int starveFlag;
 	State state;
@@ -40,12 +63,23 @@ typedef struct PCB {
 	unsigned int IO_2_Traps[NUM_IO_TRAPS];
 } PcbStr;
 
-PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon){
-	PcbStr* pcb = PCBConstructor();
-	pcb->myPC = procon;
-	//pcb->myMR = NULL;
-	return pcb;
-}
+//PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon){
+//	PcbStr* pcb = PCBConstructor();
+//	pcb->myPC = procon;
+//	//pcb->myMR = NULL;
+//	return pcb;
+//}
+
+//PcbPtr ProducerPCBConstructor(ProConPtr procon) {
+//	PcbStr* pcb = PCBConstructor();
+//	//todo stuff
+//	return pcb;
+//}
+//PcbPtr ConsumerPCBConstructor(ProConPtr procon) {
+//	PcbStr* pcb = PCBConstructor();
+//	//todo stuff
+//	return pcb;
+//}
 
 unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
 	if (index < NUM_IO_TRAPS) {
@@ -160,14 +194,16 @@ void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
 	}
 }
 
-PcbPtr PCBConstructor(){
-	PcbStr* pcb = (PcbStr*) malloc(sizeof(PcbStr));
+PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
+	//TODO modify the constructor to make a relationship type
+
+	//PcbStr* pcb = (PcbStr*) malloc(sizeof(PcbStr));
 	pcb->PC = 0;
 	pcb->PID = 1;
 	pcb->priority = 1;
 	pcb->state = created;
 	pcb->creation = time(NULL);
-	pcb->maxPC = 2000;
+	pcb->maxPC = MAX_PC;
 	pcb->terminate = rand()%10;	//ranges from 0-10
 	pcb->term_count = 0;
 
@@ -185,6 +221,10 @@ PcbPtr PCBConstructor(){
 	free(allTraps);
 
 	return pcb;
+}
+
+PcbPtr PCBAllocateSpace() {
+	return (PcbStr*) malloc(sizeof(PcbStr));
 }
 
 
@@ -246,46 +286,39 @@ void PCBDestructor(PcbPtr pcb) {
 	pcb = NULL;	//Only locally sets the pointer to null
 }
 
-//ADDING PRODUCER CONSUMER OBJECT AND FUNCTIONS HERE
-typedef struct ProducerConsumer {
-	Mutex* mutex;
-	PcbPtr Producer;
-	PcbPtr Consumer;
-	int isWaiting; //0 for false, 1 for true;
-				   //at most one process in this pair will be waiting at any given time
-	int bufavail;  //both can access
-	unsigned int* ProducerMutexLock;//[PRO_LOCK_UNLOCK];
-	unsigned int* ConsumerMutexLock;//[CON_LOCK_UNLOCK];
-	unsigned int* ProducerMutexUnlock;//[PRO_LOCK_UNLOCK];
-	unsigned int* ConsumerMutexUnlock;//[CON_LOCK_UNLOCK];
-	unsigned int* ProducerCondVarWait;//[PRO_WAIT];
-	unsigned int* ConsumerCondVarWait;//[CON_WAIT];
-	unsigned int* ProducerCondVarSignal;//[PRO_SIGNAL];
-	unsigned int* ConsumerCondVarSignal;//[CON_SIGNAL];
-} ProducerConsumerStr;
+typedef struct mutRecPairSteps {
+	unsigned int lock[SR_LOCK_UNLOCK];
+	unsigned int unlock[SR_LOCK_UNLOCK];
+} MutRecStepsStr;
 
-ProConPtr ProducerConsumerConstructor(PcbPtr prod, PcbPtr cons,
-									unsigned int proLock[], unsigned int conLock[],
-									unsigned int proUnlock[], unsigned int conUnlock[],
-									unsigned int proWait[], unsigned int conWait[],
-									unsigned int proSig[], unsigned int conSig[]) {
+typedef struct prodConsPairSteps {
+	unsigned int lock[PC_LOCK_UNLOCK];
+	unsigned int unlock[PC_LOCK_UNLOCK];
+	unsigned int signal[PC_SIGNAL];
+	unsigned int wait[PC_WAIT];
+} ProdConsStepsStr;
 
-	ProducerConsumerStr* procon = (ProducerConsumerStr*) malloc(sizeof(ProducerConsumerStr));
-	procon->mutex = (Mutex*) malloc(sizeof(Mutex));
-	procon->Producer = prod;
-	procon->Consumer = cons;
-	procon->ProducerMutexLock = proLock;
-	procon->ConsumerMutexLock = conLock;
-	procon->ProducerMutexUnlock = proUnlock;
-	procon->ConsumerMutexUnlock = conUnlock;
-	procon->ProducerCondVarWait = proWait;
-	procon->ConsumerCondVarWait = conWait;
-	procon->ProducerCondVarSignal = proSig;
-	procon->ConsumerCondVarSignal = conSig;
-	procon->bufavail = MAX_SHARED_SIZE;
-	procon->isWaiting = 0;
+/*Helper method to generate the step instructions for producer/consumer PCBs*/
+void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
+	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
+	int partitionSize = (MAX_PC - 1) / 4;
+	int i;
+	for(i = 0; i < 4; i++) {
+		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
+		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
+			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
+		}
+	}
+	lock[0] = LockUnlock[0];
+	lock[1] = LockUnlock[2];
+	unlock[0] = LockUnlock[1];
+	unlock[1] = LockUnlock[3];
+		//The wait instruction is somewhere between the first lock/unlock pair
+		//the signal instruction is somewhere between the second lock/unlock pair
+	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
+	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
 
-	return procon;
+	free(LockUnlock);
 }
 
 /* this is different than waiting for a mutex.
@@ -295,15 +328,23 @@ ProConPtr ProducerConsumerConstructor(PcbPtr prod, PcbPtr cons,
  * but NOT put back into ready queue.  This PCB will get put back into ready queue when whatever signal
  * it’s waiting on is set by the other PCB in this pair.*/
 
-int Wait(ProducerConsumerStr* procon, PcbPtr waiter) {
-	if ((waiter == procon->Producer && procon->bufavail == 0)
-		|| (waiter == procon->Consumer && procon->bufavail == MAX_SHARED_SIZE)) {
-
-		procon->isWaiting = 1;
-		MutexUnlock(procon->mutex, waiter);
-		return 1;
+int ProConWait(PcbPtr waiter) {
+	if(waiter->RelationshipStr.mType == producer /*&& shared resource is full*/
+			|| waiter->RelationshipStr.mType == consumer /*&& shared resource is empty*/) {
+		//put this process in the waiting queue of the condition variable
+		//unlock the mutex it's holding
+		return 1;//is waiting
 	}
-	return 0;
+	return 0;//is not waiting
+
+//	if ((waiter == procon->Producer && procon->bufavail == 0)
+//		|| (waiter == procon->Consumer && procon->bufavail == MAX_SHARED_SIZE)) {
+//
+//		procon->isWaiting = 1;
+//		MutexUnlock(procon->mutex, waiter);
+//		return 1;
+//	}
+//	return 0;
 }
 
 /* The way this will work, is this is doing the “producing” and “consuming” work while at the same time signaling.
@@ -317,29 +358,55 @@ int Wait(ProducerConsumerStr* procon, PcbPtr waiter) {
  * If what is returned is a null pointer, then do nothing.
  * Otherwise, we know we need to put whatever was returned back into the ready queue, because it’s no longer waiting.*/
 
-PcbPtr Signal(ProducerConsumerStr* procon, PcbPtr signaler) {
+PcbPtr ProConSignal(PcbPtr signaler) {
 	PcbPtr toReturn = NULL;
-	if (signaler == procon->Producer) {
-		if (procon->bufavail == MAX_SHARED_SIZE && procon->isWaiting) {
-			procon->isWaiting = 0;
-			toReturn = procon->Consumer;
-		}
-		procon->bufavail --;
-	} else {
-		if (procon->bufavail == 0 && procon->isWaiting) {
-			procon->isWaiting = 0;
-			toReturn = procon->Producer;
-		}
-		procon->bufavail ++;
+	if (1/*(shared variable is currently empty
+	 	 	|| shared variable is currently full) && partner is waiting*/) {
+		toReturn = signaler->RelationshipStr.mPartner;
+		//take the partner out of the condition variable's waiting queue?
+
 	}
+	if (signaler->RelationshipStr.mType == producer) {
+		//increase availability of shared resource
+	} else {
+		//decrease availability of shared resource
+	}
+
+//	if (signaler == procon->Producer) {
+//		if (procon->bufavail == MAX_SHARED_SIZE && procon->isWaiting) {
+//			procon->isWaiting = 0;
+//			toReturn = procon->Consumer;
+//		}
+//		procon->bufavail --;
+//	} else {
+//		if (procon->bufavail == 0 && procon->isWaiting) {
+//			procon->isWaiting = 0;
+//			toReturn = procon->Producer;
+//		}
+//		procon->bufavail ++;
+//	}
 	return toReturn;
 }
 
+//MUTEX STUFF
+typedef struct Mutex{
+	PcbPtr owner;
+	FifoQueue * waitQ;
+}MutexStr;
 
-////test pcb
-//int main(void) {
-//	srand(time(NULL));
-//	PcbStr* pcb = PCBConstructor(0);
-//	printf("%s", PCBToString(pcb));
-//	return 0;
-//}
+void MutexDestructor(MutexPtr mutex) {
+	fifoQueueDestructor(&mutex->waitQ);
+	PCBDestructor(mutex->owner);
+
+	free(mutex);
+	mutex = NULL;	//locally
+}
+
+//Returns 1 or 0, 1 if the process got ahold of the lock, 0 if not
+int MutexLock(MutexPtr mutex, PcbPtr pcb) {
+	//TODO
+}
+
+void MutexUnlock(MutexPtr mutex, PcbPtr pcb) {
+	//TODO
+}
