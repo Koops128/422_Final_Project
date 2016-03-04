@@ -20,15 +20,16 @@
 //#include "ProdConsObj.h"
 
 #define NUM_IO_TRAPS 4
+#define MAX_PC 200
 
 //PRODUCER CONSUMER DEFINES
-#define PRO_LOCK_UNLOCK 1
-#define CON_LOCK_UNLOCK 1
-#define PRO_WAIT 1
-#define CON_WAIT 1
-#define PRO_SIGNAL 1
-#define CON_SIGNAL 1
+#define PC_LOCK_UNLOCK 2
+#define PC_WAIT 1
+#define PC_SIGNAL 1
 #define MAX_SHARED_SIZE 5
+
+//SHARED RESOURCE DEFINES
+#define SR_LOCK_UNLOCK 2
 
 typedef enum {
 	created=0,
@@ -39,13 +40,18 @@ typedef enum {
 	terminated=5
 } State;
 
+typedef enum {
+	none=0,
+	producer=1,
+	consumer=2,
+	mutrecA=3,
+	mutrecB=4
+} RelationshipType;
+
 
 typedef struct PCB* PcbPtr;
 
-//ADDING PRODUCER CONSUMER OBJECT HERE
-typedef struct ProducerConsumer* ProConPtr;
-
-PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon);
+typedef struct Mutex* MutexPtr;
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
@@ -113,7 +119,9 @@ int PCBGetTerminate(PcbPtr pcb);
 
 unsigned int PCBGetTermCount(PcbPtr pcb);
 
-PcbPtr PCBConstructor();
+PcbPtr PCBConstructor(PcbPtr thisPcb, RelationshipType theType, PcbPtr partner);
+
+PcbPtr PCBAllocateSpace();
 
 /**
  * Returns a string representation of this PCB.
@@ -125,15 +133,17 @@ char *PCBToString(PcbPtr pcb);
  */
 void PCBDestructor(PcbPtr pcb);
 
-//ADDING PRODUCERCONSUMER FUNCTIONS HERE
-ProConPtr ProducerConsumerConstructor(PcbPtr prod, PcbPtr cons,
-		unsigned int proLock[], unsigned int conLock[],
-		unsigned int proUnlock[], unsigned int conUnlock[],
-		unsigned int proWait[], unsigned int conWait[],
-		unsigned int proSig[], unsigned int conSig[]);
+int ProConWait(PcbPtr waiter);
 
-int Wait(ProConPtr procon, PcbPtr waiter);
+PcbPtr ProConSignal(PcbPtr signaler);
 
-PcbPtr Signal(ProConPtr procon, PcbPtr signaler);
+//MUTEX STUFF
+MutexPtr MutexConstructor();
+
+void MutexDestructor(MutexPtr mutex);
+
+void MutexLock(MutexPtr mutex, PcbPtr pcb);
+
+void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
 
 #endif /* PCB_H_ */
