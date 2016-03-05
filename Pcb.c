@@ -14,66 +14,19 @@
 *
 ************************************************************************************************/
 
-#include "Pcb.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 
+#include "Pcb.h"
+
+
+/***********************************************************************************/
+/*                                      STATE                                      */
+/***********************************************************************************/
+
 const char* stateNames[] = {"Created","Running","Ready","Interrupted","Blocked","Terminated"};
-
-typedef struct PCB {
-	int PID;
-	int priority;
-	PC *myPC;
-	//MR myMR; TODO
-	int starveFlag;
-	State state;
-	unsigned int PC;
-	unsigned int maxPC;
-	unsigned long int creation;
-	unsigned long int termination;
-	unsigned int terminate;
-	unsigned int term_count;
-	unsigned int IO_1_Traps[NUM_IO_TRAPS];
-	unsigned int IO_2_Traps[NUM_IO_TRAPS];
-} PcbStr;
-
-PcbPtr ProducerConsumerPCBConstructor(PC *procon){
-	PcbStr* pcb = PCBConstructor();
-	pcb->myPC = procon;
-	//pcb->myMR = NULL;
-	return pcb;
-}
-
-
-PcbPtr ProducerPCBConstructor(ProConPtr procon) {
-	PcbStr* pcb = PCBConstructor();
-	//todo stuff
-	return pcb;
-}
-PcbPtr ConsumerPCBConstructor(ProConPtr procon) {
-	PcbStr* pcb = PCBConstructor();
-	//todo stuff
-	return pcb;
-}
-
-
-unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
-	if (index < NUM_IO_TRAPS) {
-		return pcb->IO_1_Traps[index];
-	} else {
-		return -1;
-	}
-}
-
-unsigned int PCBGetIO2Trap(PcbStr* pcb, int index) {
-	if (index < NUM_IO_TRAPS) {
-		return pcb->IO_2_Traps[index];
-	} else {
-		return -1;
-	}
-}
 
 char* StateToString(State state) {
 	int len = strlen(stateNames[state]);
@@ -82,22 +35,79 @@ char* StateToString(State state) {
 	return string;
 }
 
-void PCBSetPriority(PcbStr* pcb, int priority) {
-	pcb->priority = priority;
+/***********************************************************************************/
+/*                                      PCB                                        */
+/***********************************************************************************/
 
+////////////////////////////////////////////////////////////////////////////////////
+//                            CONSTUCTOR, DESTRUCTOR                              //
+////////////////////////////////////////////////////////////////////////////////////
+
+PcbPtr PCBConstructor(){
+	PcbStr* pcb = (PcbStr*) malloc(sizeof(PcbStr));
+	if(pcb == NULL)
+	{
+		return NULL;
+	}
+	
+	// Set data
+	pcb->derivedObjectPtr = pcb;	// PCB is base class; therefore, make derivedPtr point to self
+	pcb->PID = 1;
+	pcb->priority = 0;
+	pcb->state = created;
+	pcb->PC = 0;
+	pcb->maxPC = 2000;
+	pcb->creation = time(NULL);
+	pcb->terminate = rand()%10;	//ranges from 0-9
+	pcb->term_count = 0;
+	
+	// Set functions
+	pcb->destructor = PCBDestructor;
+	pcb->setID = PCBSetID;
+	pcb->setPriority = PCBSetPriority;
+	pcb->setState = PCBSetState;
+	pcb->setPC = PCBSetPC;
+	pcb->setTermination = PCBSetTermination;
+	pcb->setTerminate = PCBSetTerminate;
+	pcb->setTermCount = PCBSetTermCount;
+
+	pcb->getID = PCBGetID;
+	pcb->getPriority = PCBGetPriority;
+	pcb->getState = PCBGetState;
+	pcb->getPC = PCBGetPC;
+	pcb->getMaxPC = PCBGetMaxPC;
+	pcb->getCreation = PCBGetCreation;
+	pcb->getTermination = PCBGetTermination;
+	pcb->getTerminate = PCBGetTerminate;
+	pcb->getTermCount = PCBGetTermCount;
+	
+	pcb->toString = PCBToString;
+
+	return pcb;
 }
+
+void PCBDestructor(PcbPtr pcb) {
+	free (pcb);
+	pcb = NULL;	//Only locally sets the pointer to null
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+//                                 SETTERS                                        //
+////////////////////////////////////////////////////////////////////////////////////
 
 void PCBSetID(PcbStr* pcb, int id) {
 	pcb->PID = id;
+}
+
+void PCBSetPriority(PcbStr* pcb, int priority) {
+	pcb->priority = priority;
+
 }
 
 void PCBSetState(PcbStr* pcb, State newState) {
 	pcb->state = newState;
 }
 
-/**
- * Sets the PC for this PCB.
- */
 void PCBSetPC(PcbStr* pcb, unsigned int newPC) {
 	pcb->PC = newPC;
 }
@@ -114,23 +124,24 @@ void PCBSetTermCount(PcbStr* pcb, unsigned int newTermCount) {
 	pcb->term_count = newTermCount;
 }
 
-/**
- * Returns PC of this PCB.
- */
-unsigned int PCBGetPC(PcbStr* pcb) {
-	return pcb->PC;
+////////////////////////////////////////////////////////////////////////////////////
+//                                 GETTERS                                        //
+////////////////////////////////////////////////////////////////////////////////////
+
+int PCBGetID(PcbStr* pcb) {
+	return pcb->PID;
 }
 
 int PCBGetPriority(PcbStr* pcb) {
 	return pcb->priority;
 }
 
-int PCBGetID(PcbStr* pcb) {
-	return pcb->PID;
-}
-
 State PCBGetState(PcbStr* pcb) {
 	return pcb->state;
+}
+
+unsigned int PCBGetPC(PcbStr* pcb) {
+	return pcb->PC;
 }
 
 unsigned int PCBGetMaxPC(PcbStr* pcb) {
@@ -153,76 +164,9 @@ unsigned int PCBGetTermCount(PcbStr* pcb) {
 	return pcb->term_count;
 }
 
-/*
- * Partitions (maxVal - minVal) into n non-overlapping partitions.
- * Sets storage[i] to a random number from the corresponding partition.
- * 
- * Ex.: n = 8, minVal = 0, maxVal = 2000
- * Partition Size = 250
- * partition[0] = 0 to 249
- * partition[1] = 250 to 499
- * ...
- * partition[7] = 1750 to 1999
- */
-void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
-	int partitionSize = (maxVal - minVal) / n;	// truncate if the division results in a double
-	int i;
-	for(i = 0; i < n; i++) {
-		storage[i] = (rand() % (partitionSize)) + (i * partitionSize);
-	}
-}
-
-PcbPtr PCBConstructor(){
-	PcbStr* pcb = (PcbStr*) malloc(sizeof(PcbStr));
-	pcb->PC = 0;
-	pcb->PID = 1;
-	pcb->priority = 1;
-	pcb->state = created;
-	pcb->creation = time(NULL);
-	pcb->maxPC = 2000;
-	pcb->terminate = rand()%10;	//ranges from 0-10
-	pcb->term_count = 0;
-
-	//genIOArrays(pcb);
-
-	unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
-	genTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC);
-
-	int i;
-	for (i = 0; i < NUM_IO_TRAPS; i++) {
-		pcb->IO_1_Traps[i] = allTraps[i*2];		//grab even indices
-		pcb->IO_2_Traps[i] = allTraps[(i*2) + 1]; //grab odd indices
-	}
-
-	free(allTraps);
-
-	return pcb;
-}
-
-
-/**Need at most 5 chars for each 8 traps, plus 8 spaces before each, or 48*/
-char* TrapsToString(PcbStr* pcb) {
-	char* arrStr = (char*) malloc(sizeof(char) * (48 + 10 + 1));
-	arrStr[0] = '\0';
-
-	char dev1[sizeof(char) * (20 + 4 + 1)];
-	dev1[0] = '\0';
-	char dev2[sizeof(char) * (20 + 4 + 1)];
-	dev2[0] = '\0';
-
-	int i;
-	for (i = 0; i < NUM_IO_TRAPS; i++) {
-		char buffer[sizeof(char) * (5+2)]; //5 is max number of digits in unsigned int, + null + space
-		sprintf(buffer, " %d", pcb->IO_1_Traps[i]);
-		strncat(dev1,buffer,7);
-		char buffer2[sizeof(char) * (5+2)];
-		sprintf(buffer2, " %d", pcb->IO_2_Traps[i]);
-		strncat(dev2,buffer2,7);
-	}
-	sprintf(arrStr, "d1[%s ] d2[%s ]", dev1, dev2);
-	return arrStr;
-}
-
+////////////////////////////////////////////////////////////////////////////////////
+//                                 TO STRING                                      //
+////////////////////////////////////////////////////////////////////////////////////
 
 char *PCBToString(PcbStr* pcb) {
 	if (pcb == NULL)
@@ -231,7 +175,6 @@ char *PCBToString(PcbStr* pcb) {
 	char * emptyStr = (char*) malloc(sizeof(char) * 1000);
 	emptyStr[199] = '\0';
 	char* stateString = StateToString(pcb->state);
-	char* trapString = TrapsToString(pcb);
 	int lenNeeded = sprintf(emptyStr, "ID: %d, Priority: %d, State: %s, PC: %d"
 			", MAX_PC %d"
 			", CREATION %lu"
@@ -243,21 +186,13 @@ char *PCBToString(PcbStr* pcb) {
 							,pcb->creation
 							,pcb->terminate
 							, pcb->term_count
-							, trapString
 							);
 	free(stateString);
-	free(trapString);
 	char * retString = (char *) malloc(sizeof(char) * lenNeeded);
 	sprintf(retString, "%s", emptyStr);
 	free(emptyStr);
 	return retString;
 }
-
-void PCBDestructor(PcbPtr pcb) {
-	free (pcb);
-	pcb = NULL;	//Only locally sets the pointer to null
-}
-
 
 ////test pcb
 //int main(void) {
