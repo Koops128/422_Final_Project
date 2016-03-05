@@ -29,25 +29,11 @@ typedef struct PCB {
 	int PID;
 	int priority;
 
-	struct {
-		RelationshipType mType;
-		PcbPtr mPartner;
-		union {
-			struct mutRecPairSteps* mrSteps;
-			struct prodConsPairSteps* pcSteps;
-		} Steps;
-	}RelationshipStr;
+	RelationshipPtr relationship;
 
 	union {
-		struct {
-			MutexPtr mutex1;
-			MutexPtr mutex2;
-		} MRDataStr;
-		struct {
-			MutexPtr mutex;
-			//condition var 1
-			//condition var 2
-		} PRDataStr;
+		MRDataPtr MutRecData;
+		PCDataPtr ProConData;
 	} PairDataStr;
 
 	//MR myMR; TODO
@@ -175,6 +161,26 @@ unsigned int PCBGetTermCount(PcbStr* pcb) {
 	return pcb->term_count;
 }
 
+RelationshipPtr PCBGetRelationship(PcbPtr pcb) {
+	return pcb->relationship;
+}
+
+MRStepsPtr PCBGetMRSteps(PcbPtr pcb) {
+	return pcb->relationship->StepsStr.mrSteps;
+}
+
+PCStepsPtr PCBGetPCSteps(PcbPtr pcb) {
+	return pcb->relationship->StepsStr.pcSteps;
+}
+
+MRDataPtr PCBGetMRData(PcbPtr pcb) {
+	return pcb->PairDataStr.MutRecData;
+}
+
+PCDataPtr PCBGetPRData(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData;
+}
+
 /*
  * Partitions (maxVal - minVal) into n non-overlapping partitions.
  * Sets storage[i] to a random number from the corresponding partition.
@@ -286,18 +292,6 @@ void PCBDestructor(PcbPtr pcb) {
 	pcb = NULL;	//Only locally sets the pointer to null
 }
 
-typedef struct mutRecPairSteps {
-	unsigned int lock[SR_LOCK_UNLOCK];
-	unsigned int unlock[SR_LOCK_UNLOCK];
-} MutRecStepsStr;
-
-typedef struct prodConsPairSteps {
-	unsigned int lock[PC_LOCK_UNLOCK];
-	unsigned int unlock[PC_LOCK_UNLOCK];
-	unsigned int signal[PC_SIGNAL];
-	unsigned int wait[PC_WAIT];
-} ProdConsStepsStr;
-
 /*Helper method to generate the step instructions for producer/consumer PCBs*/
 void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
 	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
@@ -329,8 +323,8 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
  * it’s waiting on is set by the other PCB in this pair.*/
 
 int ProConWait(PcbPtr waiter) {
-	if(waiter->RelationshipStr.mType == producer /*&& shared resource is full*/
-			|| waiter->RelationshipStr.mType == consumer /*&& shared resource is empty*/) {
+	if(waiter->relationship->mType == producer /*&& shared resource is full*/
+			|| waiter->relationship->mType == consumer /*&& shared resource is empty*/) {
 		//put this process in the waiting queue of the condition variable
 		//unlock the mutex it's holding
 		return 1;//is waiting
@@ -362,11 +356,11 @@ PcbPtr ProConSignal(PcbPtr signaler) {
 	PcbPtr toReturn = NULL;
 	if (1/*(shared variable is currently empty
 	 	 	|| shared variable is currently full) && partner is waiting*/) {
-		toReturn = signaler->RelationshipStr.mPartner;
+		toReturn = signaler->relationship->mPartner;
 		//take the partner out of the condition variable's waiting queue?
 
 	}
-	if (signaler->RelationshipStr.mType == producer) {
+	if (signaler->relationship->mType == producer) {
 		//increase availability of shared resource
 	} else {
 		//decrease availability of shared resource
