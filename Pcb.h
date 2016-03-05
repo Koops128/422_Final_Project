@@ -48,10 +48,47 @@ typedef enum {
 	mutrecB=4
 } RelationshipType;
 
-
 typedef struct PCB* PcbPtr;
 
+typedef struct Relationship* RelationshipPtr;
+typedef struct mutRecPairSteps* MRStepsPtr;
+typedef struct prodConsPairSteps* PCStepsPtr;
+typedef struct MRData* MRDataPtr;
+typedef struct PCData* PCDataPtr;
+
 typedef struct Mutex* MutexPtr;
+
+typedef struct mutRecPairSteps {
+	unsigned int lock[SR_LOCK_UNLOCK];
+	unsigned int unlock[SR_LOCK_UNLOCK];
+} MutRecStepsStr;
+
+typedef struct prodConsPairSteps {
+	unsigned int lock[PC_LOCK_UNLOCK];
+	unsigned int unlock[PC_LOCK_UNLOCK];
+	unsigned int signal[PC_SIGNAL];
+	unsigned int wait[PC_WAIT];
+} ProdConsStepsStr;
+
+typedef struct Relationship{
+	RelationshipType mType;
+	PcbPtr mPartner;
+	union Steps{
+		MRStepsPtr mrSteps;
+		PCStepsPtr pcSteps;
+	} StepsStr;
+}RelationshipStr;
+
+typedef struct MRData{
+	MutexPtr mutex1;
+	MutexPtr mutex2;
+} MRDataStr;
+
+typedef struct PCData{
+	MutexPtr mutex;
+	//condition var 1
+	//condition var 2
+} PCDataStr;
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
@@ -118,6 +155,16 @@ unsigned long PCBGetTermination(PcbPtr pcb);
 int PCBGetTerminate(PcbPtr pcb);
 
 unsigned int PCBGetTermCount(PcbPtr pcb);
+
+RelationshipPtr PCBGetRelationship(PcbPtr pcb);
+
+MRStepsPtr PCBGetMRSteps(PcbPtr pcb);
+
+PCStepsPtr PCBGetPCSteps(PcbPtr pcb);
+
+MRDataPtr PCBGetMRData(PcbPtr pcb);
+
+PCDataPtr PCBGetPRData(PcbPtr pcb);
 
 PcbPtr PCBConstructor(PcbPtr thisPcb, RelationshipType theType, PcbPtr partner);
 
