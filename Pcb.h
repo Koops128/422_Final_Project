@@ -17,9 +17,9 @@
 #ifndef PCB_H_
 #define PCB_H_
 
-#include "ProducerConsumer.h"
-
-#define NUM_IO_TRAPS 4
+/***********************************************************************************/
+/*                                      STATE                                      */
+/***********************************************************************************/
 
 typedef enum {
 	created=0,
@@ -30,91 +30,114 @@ typedef enum {
 	terminated=5
 } State;
 
+char* StateToString(State state);
+
+/***********************************************************************************/
+/*                                      PCB                                        */
+/***********************************************************************************/
 
 typedef struct PCB* PcbPtr;
 
-PcbPtr ProducerConsumerPCBConstructor(PC *procon);
+//declaration of pointers to functions
+typedef void 			(*fptrDestructor)	(PcbPtr);
 
-//JUST ADDING METHOD STUBS FOR NOW
-PcbPtr ProducerPCBConstructor(ProConPtr procon);
-PcbPtr ConsumerPCBConstructor(ProConPtr procon);
+typedef	void			(*fptrSetID) 		(PcbPtr, int);
+typedef	void 			(*fptrSetPriority)	(PcbPtr, int);
+typedef	void 			(*fptrSetState)		(PcbPtr, State);
+typedef	void 			(*fptrSetPC)		(PcbPtr, unsigned int);
+typedef	void 			(*fptrSetTermination)(PcbPtr, unsigned long);
+typedef	void 			(*fptrSetTerminate)	(PcbPtr, int);
+typedef	void 			(*fptrSetTermCount)	(PcbPtr, unsigned int);
+	
+typedef	int 			(*fptrGetID)		(PcbPtr);
+typedef	int 			(*fptrGetPriority)	(PcbPtr);
+typedef	State 			(*fptrGetState)		(PcbPtr);
+typedef	unsigned int 	(*fptrGetPC)		(PcbPtr);
+typedef	unsigned int 	(*fptrGetMaxPC)		(PcbPtr);
+typedef	unsigned long 	(*fptrGetCreation)	(PcbPtr);
+typedef	unsigned long 	(*fptrGetTermination)(PcbPtr);
+typedef	int 			(*fptrGetTerminate)	(PcbPtr);
+typedef	unsigned int 	(*fptrGetTermCount)	(PcbPtr);
 
-unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
-unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
+typedef char* 			(*fptrToString)		(PcbPtr);
 
-/*Returns a string value for the given state.*/
-char* StateToString(State state);
+// PCB struct
+typedef struct PCB {
+	// data
+	 void* derivedObjectPtr;
+	 int PID;
+	 int priority;
+	 State state;
+	 unsigned int PC;
+	 unsigned int maxPC;
+	 unsigned long int creation;
+	 unsigned long int termination;
+	 unsigned int terminate;
+	 unsigned int term_count;
+	
+	//functions
+	fptrDestructor 		destructor;
+	fptrSetID			setID;
+	fptrSetPriority		setPriority;
+	fptrSetState		setState;
+	fptrSetPC			setPC;
+	fptrSetTermination 	setTermination;
+	fptrSetTerminate	setTerminate;
+	fptrSetTermCount	setTermCount;
 
-/**
- * Sets a new priority for this PCB.
- */
-void PCBSetPriority(PcbPtr pcb, int priority);
+	fptrGetID			getID;
+	fptrGetPriority		getPriority;
+	fptrGetState		getState;
+	fptrGetPC			getPC;
+	fptrGetMaxPC		getMaxPC;
+	fptrGetCreation		getCreation;
+	fptrGetTermination	getTermination;
+	fptrGetTerminate	getTerminate;
+	fptrGetTermCount	getTermCount;
+	
+	fptrToString		toString;
+} PcbStr;
+typedef struct PCB* PcbPtr;
 
-/**
- * Sets a new ID for this PCB.
- */
-void PCBSetID(PcbPtr pcb, int id);
-
-/**
- * Sets the state for this PCB.
- */
-void PCBSetState(PcbPtr pcb, State newState);
-
-/**
- * Sets the PC for this PCB.
- */
-void PCBSetPC(PcbPtr pcb, unsigned int newPC);
-
-//void PCBSetMaxPC(PcbPtr pcb, unsigned int newMaxPC);
-
-//void PCBSetCreation(PcbPtr pcb, unsigned int newCreation);
-
-void PCBSetTermination(PcbPtr pcb, unsigned long newTermination);
-
-void PCBSetTerminate(PcbPtr pcb, int newTerminate);
-
-void PCBSetTermCount(PcbPtr pcb, unsigned int newTermCount);
-
-/**
- * Returns PC of this PCB.
- */
-unsigned int PCBGetPC(PcbPtr pcb);
-
-/**
- * Returns the value of the priority for this PCB.
- */
-int PCBGetPriority(PcbPtr pcb);
-
-/**
- * Returns the value of the ID for this PCB.
- */
-int PCBGetID(PcbPtr pcb);
-
-/**
- * Returns the state of this PCB.
- */
-State PCBGetState(PcbPtr pcb);
-
-unsigned int PCBGetMaxPC(PcbPtr pcb);
-
-unsigned long PCBGetCreation(PcbPtr pcb);
-
-unsigned long PCBGetTermination(PcbPtr pcb);
-
-int PCBGetTerminate(PcbPtr pcb);
-
-unsigned int PCBGetTermCount(PcbPtr pcb);
+////////////////////////////////////////////////////////////////////////////////////
+//                            CONSTUCTOR, DESTRUCTOR                              //
+////////////////////////////////////////////////////////////////////////////////////
 
 PcbPtr PCBConstructor();
-
-/**
- * Returns a string representation of this PCB.
- */
-char *PCBToString(PcbPtr pcb);
-
-/**
- * Deallocates all memory references that are kept within the PCB, and then frees the PCB passed in.
- */
 void PCBDestructor(PcbPtr pcb);
+
+////////////////////////////////////////////////////////////////////////////////////
+//                                 SETTERS                                        //
+////////////////////////////////////////////////////////////////////////////////////
+
+void PCBSetID(PcbPtr pcb, int id);
+void PCBSetPriority(PcbPtr pcb, int priority);
+void PCBSetState(PcbPtr pcb, State newState);
+void PCBSetPC(PcbPtr pcb, unsigned int newPC);
+//void PCBSetMaxPC(PcbPtr pcb, unsigned int newMaxPC);
+//void PCBSetCreation(PcbPtr pcb, unsigned int newCreation);
+void PCBSetTermination(PcbPtr pcb, unsigned long newTermination);
+void PCBSetTerminate(PcbPtr pcb, int newTerminate);
+void PCBSetTermCount(PcbPtr pcb, unsigned int newTermCount);
+
+////////////////////////////////////////////////////////////////////////////////////
+//                                 GETTERS                                        //
+////////////////////////////////////////////////////////////////////////////////////
+
+int PCBGetID(PcbPtr pcb);
+int PCBGetPriority(PcbPtr pcb);
+State PCBGetState(PcbPtr pcb);
+unsigned int PCBGetPC(PcbPtr pcb);
+unsigned int PCBGetMaxPC(PcbPtr pcb);
+unsigned long PCBGetCreation(PcbPtr pcb);
+unsigned long PCBGetTermination(PcbPtr pcb);
+int PCBGetTerminate(PcbPtr pcb);
+unsigned int PCBGetTermCount(PcbPtr pcb);
+
+////////////////////////////////////////////////////////////////////////////////////
+//                                 TO STRING                                      //
+////////////////////////////////////////////////////////////////////////////////////
+
+char *PCBToString(PcbPtr pcb);
 
 #endif /* PCB_H_ */
