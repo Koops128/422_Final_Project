@@ -17,11 +17,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
 #include "Pcb.h"
+#include "IoPcb.h"
 #include "Fifo.h"
-#include "Device.h"
-#include "Mutex.h"
-#include "PriorityQueue.h"
 
 //defines
 #define TIMER_INTERRUPT 1
@@ -34,6 +33,22 @@
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
 
+typedef struct {
+	FifoQueue* waitQ;
+	int counter;
+} Device;
+
+Device* IODeviceConstructor() {
+	Device* device = (Device*) malloc(sizeof(Device));
+	device->waitQ = fifoQueueConstructor();
+	device->counter = -1;
+	return device;
+}
+
+void IODeviceDestructor(Device* device) {
+	fifoQueueDestructor(&device->waitQ);
+	free(device);
+}
 
 //Global variables
 int currPID; //The number of processes created so far. The latest process has this as its ID.
@@ -198,12 +213,12 @@ int checkIORequest(int devnum) {
 	if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
 		if (devnum == 1) { //look through array 1
 			for (i=0; i < NUM_IO_TRAPS; i++) {
-				requestMade = PCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
+				requestMade = IoPCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
 			}
 		}
 		else if (devnum == 2) { //look through array 2
 			for (i=0; i < NUM_IO_TRAPS; i++) {
-				requestMade = PCBGetIO2Trap(currProcess, i) == sysStackPC ? 1: requestMade;
+				requestMade = IoPCBGetIO2Trap(currProcess, i) == sysStackPC ? 1: requestMade;
 			}
 		}
 	}
@@ -239,7 +254,7 @@ void genProcesses() {
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
-		newProc = PCBConstructor();
+		newProc = IoPCBConstructor();
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
 			currPID++;
@@ -252,116 +267,6 @@ void genProcesses() {
 			//printf("Process created: %s\r\n", PCBToString(newProc));
 		}
 	}
-}
-
-/*Helper method for genProducerConsumerPair*/
-void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
-	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
-	int partitionSize = (MAX_PC - 1) / 4;
-	int i;
-	for(i = 0; i < 4; i++) {
-		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
-		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-		}
-	}
-	lock[0] = LockUnlock[0];
-	lock[1] = LockUnlock[2];
-	unlock[0] = LockUnlock[1];
-	unlock[1] = LockUnlock[3];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
-
-	free(LockUnlock);
-}
-
-void genProducerConsumerPair() {
-	//create the arrays we need
-	unsigned int* ProducerMutexLock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexLock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerMutexUnlock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexUnlock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerCondVarWait = malloc(sizeof(unsigned int) * PRO_WAIT);
-	unsigned int* ConsumerCondVarWait = malloc(sizeof(unsigned int) * CON_WAIT);
-	unsigned int* ProducerCondVarSignal = malloc(sizeof(unsigned int) * PRO_SIGNAL);
-	unsigned int* ConsumerCondVarSignal = malloc(sizeof(unsigned int) * CON_SIGNAL);
-
-	//hardcode the step instruction arrays
-		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
-	setPCTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
-	setPCTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
-
-	//Create the ProducerConsumer object
-	ProConPtr procon = ProducerConsumerConstructor(ProducerMutexLock, ConsumerMutexLock,
-												   ProducerMutexUnlock, ConsumerMutexUnlock,
-												   ProducerCondVarWait, ConsumerCondVarWait,
-												   ProducerCondVarSignal, ConsumerCondVarSignal);
-
-	//Create the producer and consumer PCB using the special PCB constructors
-	PcbPtr producer = ProducerPCBConstructor(procon);
-	PcbPtr consumer = ConsumerPCBConstructor(procon);
-
-	//set the procon object's producer and consumer PCBs
-	ProConSetProducer(producer, procon);
-	ProConSetConsumer(consumer, procon);
-
-}
-
-/*Helper method for genProducerConsumerPair*/
-void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
-	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
-	int partitionSize = (MAX_PC - 1) / 4;
-	int i;
-	for(i = 0; i < 4; i++) {
-		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
-		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-		}
-	}
-	lock[0] = LockUnlock[0];
-	lock[1] = LockUnlock[2];
-	unlock[0] = LockUnlock[1];
-	unlock[1] = LockUnlock[3];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
-
-	free(LockUnlock);
-}
-
-void genProducerConsumerPair() {
-	//create the arrays we need
-	unsigned int* ProducerMutexLock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexLock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerMutexUnlock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexUnlock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerCondVarWait = malloc(sizeof(unsigned int) * PRO_WAIT);
-	unsigned int* ConsumerCondVarWait = malloc(sizeof(unsigned int) * CON_WAIT);
-	unsigned int* ProducerCondVarSignal = malloc(sizeof(unsigned int) * PRO_SIGNAL);
-	unsigned int* ConsumerCondVarSignal = malloc(sizeof(unsigned int) * CON_SIGNAL);
-
-	//hardcode the step instruction arrays
-		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
-	setLockUnlockTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
-	setLockUnlockTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
-
-	//Create the ProducerConsumer object
-	ProConPtr procon = ProducerConsumerConstructor(ProducerMutexLock, ConsumerMutexLock,
-							ProducerMutexUnlock, ConsumerMutexUnlock,
-							ProducerCondVarWait, ConsumerCondVarWait,
-							ProducerCondVarSignal, ConsumerCondVarSignal);
-
-	//Create the producer and consumer PCB using the special PCB constructors
-	PcbPtr producer = ProducerPCBConstructor(procon);
-	PcbPtr consumer = ConsumerPCBConstructor(procon);
-
-	//set the procon object's producer and consumer PCBs
-	ProConSetProducer(producer, procon);
-	ProConSetConsumer(consumer, procon);
-
 }
 
 void cpu() {
@@ -455,13 +360,13 @@ int main(void) {
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = fifoQueueConstructor();
 	terminatedProcesses = fifoQueueConstructor();
-	device1 = DeviceConstructor();
-	device2 = DeviceConstructor();
+	device1 = IODeviceConstructor();
+	device2 = IODeviceConstructor();
 
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
 	//An initial process to start with
-	currProcess = PCBConstructor();
+	currProcess = IoPCBConstructor();
 	if(currProcess != NULL)	// Remember to call the destructor when finished using newProc
 	{
 		PCBSetID(currProcess, currPID);
@@ -478,8 +383,8 @@ int main(void) {
 	fifoQueueDestructor(&readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
-	DeviceDestructor(device1);
-	DeviceDestructor(device2);
+	IODeviceDestructor(device1);
+	IODeviceDestructor(device2);
 
 	printf("End of simulation\r\n");
 	return 0;
