@@ -115,21 +115,21 @@ void scheduler(int interruptType) {
 
 /**
  * Checks if the pcb is locked by another pcb
- * and returns the MutRay index if it is, -1 otherwise
+ * and returns the Mutex owner pcb if it is, null otherwise
  */
-int isLocked(PcbPtr owner) {
+PcbPtr isLocked(PcbPtr owner) {
 	int i, j;
 	for (i = 0; i < MutRaySize; i++) {
 		MutexPtr m = MutRay[i];
-		if (m->owner != NULL && m->waitQ != NULL) {
+		if (m->owner != NULL && MutexHasWaiting(m)) {
 			for (j = 0; j < m->waitQ->size; j++) {
-				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex index
-					return i;
+				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
+					return m->owner;
 				}
 			}
 		}
 	}
-	return -1;
+	return NULL;
 }
 
 /*
@@ -139,14 +139,12 @@ int isLocked(PcbPtr owner) {
  * Returns 1 if pcb is deadlocked, 0 otherwise
  */
 int checkLock(PcbPtr owner) {
-	int v = isLocked(owner);
-	PcbPtr *parent;
-	while (v != -1) {//check what its locked by repeatedly
-		if (owner == MutRay[v]->owner) { //locked by lock itself is locking
+	PcbPtr parent = isLocked(owner);
+	while (parent != NULL) {//check what its locked by repeatedly
+		if (owner == parent) { //locked by lock itself is locking
 			return 1;
 		}
-		*parent = MutRay[v]->owner; //else check what that pcb is locked by
-		v = isLocked(*parent);
+		parent = isLocked(parent);//else check what that pcb is locked by
 	}
 	return 0; //pcb is not locked, chain is done
 }

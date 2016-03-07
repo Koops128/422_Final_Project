@@ -66,7 +66,7 @@ void fifoQueueDestructor(FifoQueue ** queue);
 /**
  * Returns 1-based index if found, -1 otherwise
  */
-int fifoQueueContains(FifoQueue *queue, PcbPtr *check);
+int fifoQueueContains(FifoQueue *queue, PcbPtr check);
 
 /**
  * Pass in the queue and a pointer of the PcbStr to enqueue
