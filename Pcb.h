@@ -56,7 +56,7 @@ typedef struct prodConsPairSteps* PCStepsPtr;
 typedef struct MRData* MRDataPtr;
 typedef struct PCData* PCDataPtr;
 
-typedef struct Mutex* MutexPtr;
+//typedef struct Mutex* MutexPtr;
 
 typedef struct mutRecPairSteps {
 	unsigned int lock[SR_LOCK_UNLOCK];
@@ -80,12 +80,15 @@ typedef struct Relationship{
 }RelationshipStr;
 
 typedef struct MRData{
-	MutexPtr mutex1;
-	MutexPtr mutex2;
+	int mutex1;
+	int mutex2;
+	//MutexPtr mutex1;
+	//MutexPtr mutex2;
 } MRDataStr;
 
 typedef struct PCData{
-	MutexPtr mutex;
+	int mutex;
+	//MutexPtr mutex;
 	//condition var 1
 	//condition var 2
 } PCDataStr;
@@ -185,12 +188,12 @@ int ProConWait(PcbPtr waiter);
 PcbPtr ProConSignal(PcbPtr signaler);
 
 //MUTEX STUFF
-MutexPtr MutexConstructor();
-
-void MutexDestructor(MutexPtr mutex);
-
-void MutexLock(MutexPtr mutex, PcbPtr pcb);
-
-void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
+//MutexPtr MutexConstructor();
+//
+//void MutexDestructor(MutexPtr mutex);
+//
+//void MutexLock(MutexPtr mutex, PcbPtr pcb);
+//
+//void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
 
 #endif /* PCB_H_ */
