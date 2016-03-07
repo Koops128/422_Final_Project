@@ -46,9 +46,14 @@ void printSuccessUnlock(int pidReleaser, int mutexId, int nextInLine)
 	printf("PID %d: unlocked mutex %d - succeeded. New owner PID: %d\n", pidReleaser, mutexId, nextInLine);
 }
 
-void printFailUnlock(int pidReleaser, int mutexId)
+void printFailUnlockWrongOwner(int pidReleaser, int mutexId, int trueOwner)
 {
-	printf("PID %d: tried to lock mutex %d, which was never locked - failed\n", pidReleaser, mutexId);
+	printf("PID %d: tried to unlock mutex %d, which is owned by PID %d - failed\n", pidReleaser, mutexId, trueOwner);
+}
+
+void printFailUnlockNoOwner(int pidReleaser, int mutexId)
+{
+	printf("PID %d: tried to unlock mutex %d, which was never locked - failed\n", pidReleaser, mutexId);
 }
 
 /*********************************************************************************/
@@ -83,23 +88,25 @@ void MutexDestructor(MutexPtr* mutexPtrPtr)
 /*                               MUTEX FUNCTIONALITY                             */
 /*********************************************************************************/
 
-void MutexLock(MutexPtr mutex, PcbPtr pcb) 
+int MutexLock(MutexPtr mutex, PcbPtr pcb) 
 {
 	if(!hasOwner(mutex))
 	{
 		printSuccessLock(PCBGetID(pcb), mutex->id);
 		mutex->owner = pcb;
+		return 1;
 	}
 	else
 	{
 		printFailLock(PCBGetID(pcb), mutex->id, PCBGetID(mutex->owner));
 		fifoQueueEnqueue(mutex->waitQ, pcb);
+		return 0;
 	}
 }
 
 void MutexUnlock(MutexPtr mutex, PcbPtr pcb) 
 {
-	if(hasOwner(mutex))
+	if(hasOwner(mutex) && mutex->owner == pcb)
 	{
 		printSuccessUnlock(PCBGetID(pcb), mutex->id, PCBGetID(fifoQueuePeek(mutex->waitQ)));
 		
@@ -112,9 +119,13 @@ void MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 			mutex->owner = NULL;
 		}
 	}
+	else if(hasOwner(mutex) && mutex->owner != pcb)
+	{
+		printFailUnlockWrongOwner(PCBGetID(pcb), mutex->id, PCBGetID(mutex->owner));
+	}
 	else
 	{
-		printFailUnlock(PCBGetID(pcb), mutex->id);
+		printFailUnlockNoOwner(PCBGetID(pcb), mutex->id);
 	}
 }
 
