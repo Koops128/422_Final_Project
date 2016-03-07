@@ -1,26 +1,51 @@
-/*
- * Mutex.h
- *
- *  Created on: Feb 19, 2016
- *      Author: Abigail
- */
+/***********************************************************************************************
+* Mutex.h
+*
+* Programming Team:
+* Sean Markus
+* Wing-Sea Poon
+* Abigail Smith
+* Tabi Stein
+*
+* Date: 1/22/16
+*
+* Description:
+* This header file defines the class and methods for the mutex implementation.
+*
+************************************************************************************************/
 
-#ifndef MUTEX_H_
-#define MUTEX_H_
+#ifndef MUTEX_H
+#define MUTEX_H
+
 #include "Pcb.h"
 #include "Fifo.h"
 
-typedef struct {
+
+/*********************************************************************************/
+/*                                 MUTEX STRUCT                                  */
+/*********************************************************************************/
+
+typedef struct Mutex 
+{
+	int id;
 	PcbPtr owner;
-	FifoQueue * waitQ;
-}Mutex;
+	FifoQueue* waitQ;
+} MutexStr;
+typedef MutexStr* MutexPtr;
 
-Mutex* MutexConstructor();
+/*********************************************************************************/
+/*                           CONSTRUCTOR, DESTRUCTOR                             */
+/*********************************************************************************/
 
-void MutexDestructor(Mutex* mutex);
+MutexPtr MutexConstructor();
+void MutexDestructor(MutexPtr* mutex);
 
-void MutexLock(Mutex* mutex, PcbPtr pcb);
+/*********************************************************************************/
+/*                               MUTEX FUNCTIONALITY                             */
+/*********************************************************************************/
 
-void MutexUnlock(Mutex* mutex, PcbPtr pcb);
+void MutexLock(MutexPtr mutex, PcbPtr pcb);
+void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
+int MutexHasWaiting(MutexPtr mutex);
 
-#endif /* MUTEX_H_ */
+#endif
