@@ -133,7 +133,7 @@ int isLocked(PcbPtr owner) {
 }
 
 /*
- * Checks the line of pcbs being locked
+ * Checks the chain of pcbs being locked by this pcb
  *
  * PcbPtr owner the pcb being checked
  * Returns 1 if pcb is deadlocked, 0 otherwise
@@ -142,13 +142,13 @@ int checkLock(PcbPtr owner) {
 	int v = isLocked(owner);
 	PcbPtr *parent;
 	while (v != -1) {//check what its locked by repeatedly
-		if (owner == MutRay[v]->owner) { //locked by itself
+		if (owner == MutRay[v]->owner) { //locked by lock itself is locking
 			return 1;
 		}
-		*parent = MutRay[v]->owner;
-
+		*parent = MutRay[v]->owner; //else check what that pcb is locked by
+		v = isLocked(*parent);
 	}
-	return 0;
+	return 0; //pcb is not locked, chain is done
 }
 
 /**
