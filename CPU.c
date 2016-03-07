@@ -20,7 +20,6 @@
 #include "Pcb.h"
 #include "Fifo.h"
 #include "Device.h"
-#include "Mutex.c"
 #include "Mutex.h"
 #include "PriorityQueue.h"
 
@@ -111,26 +110,6 @@ void scheduler(int interruptType) {
 		break;
 	default :
 		break;
-	}
-}
-
-/*
- *
- * PcbPtr owner, the owner pcb that has a lock
- * PcbPtr ch, checking if this locked pcb is being circularly locked
- * by itself owner; deadlocked
- * int j index of pcb being checked in Mutex wait queue
- * int i index of Mutex being checked in MutRay
- */
-int mutexContainsLock(PcbPtr owner, PcbPtr ch, int j, int i) {
-	if (owner == ch) //locked by itself
-		return 0;
-	int k = 0;
-	for (k = 0; k < MutRaySize; k++) {
-		if (k != i && MutRay[k]->owner != NULL) { //don't check same mutex && other mutex has owner
-			int z;
-
-		}
 	}
 }
 
