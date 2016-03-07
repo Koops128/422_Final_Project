@@ -26,12 +26,13 @@
 //defines
 #define TIMER_INTERRUPT 1
 #define TERMINATE_INTERRUPT 2
-#define PRO_CON_INTERRUPT 3
+#define PRO_CON_INTERRUPT 5
 #define IO_REQUEST 3
 #define IO_COMPLETION 4
 #define TIMER_QUANTUM 500
 #define NEW_PROCS		6
-#define NEW_PC_PROCS	1
+#define PC_PROCS	1
+#define MR_PROCS	1
 #define PRIORITY_LEVELS 16
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
@@ -47,6 +48,7 @@ FifoQueue* terminatedProcesses;
 PcbPtr currProcess;
 Device* device1;
 Device* device2;
+MutexPtr mutexes[sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2)];
 
 typedef enum {
 	lockTrap=0,
@@ -55,6 +57,38 @@ typedef enum {
 	signalTrap=3,
 	noTrap=4
 } ProdConsTrapType;
+
+////MUTEX STUFF
+//typedef struct Mutex{
+//	PcbPtr owner;
+//	FifoQueue * waitQ;
+//}MutexStr;
+//
+//MutexStr* mutexes;// = (MutexStr*) malloc(sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2));
+//
+//MutexStr* MutexConstructor() {
+//	MutexStr* mutex = (MutexStr*) malloc(sizeof(MutexStr));
+//	mutex->waitQ = fifoQueueConstructor();
+//
+//	return mutex;
+//}
+//
+//void MutexDestructor(MutexStr* mutex) {
+//	fifoQueueDestructor(&mutex->waitQ);
+//	PCBDestructor(mutex->owner);
+//
+//	free(mutex);
+//	mutex = NULL;	//locally
+//}
+
+////Returns 1 or 0, 1 if the process got a hold of the lock, 0 if not
+//int MutexLock(MutexStr* mutex, PcbPtr pcb) {
+//	//TODO
+//}
+//
+//void MutexUnlock(MutexStr* mutex, PcbPtr pcb) {
+//	//TODO
+//}
 
 /*Prepares the waiting process to be executed.*/
 void dispatcher() {
@@ -199,23 +233,24 @@ void IOTrapHandler(Device* d) {
 void ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 	saveCpuToPcb();
 	PCBSetState(currProcess, blocked);
+	PcbPtr returned;
 
 	switch(trapRequest) {
 		case lockTrap :
 			//if lock, then call the pair's mutex for a lock.  If it needs to wait for the lock,
 			//then call the scheduler with an interrupt
-			if(!MutexLock(PCBGetPRData(currProcess)->mutex, currProcess)) {
+			if(!MutexLock(mutexes[PCBGetPRData(currProcess)->mutex], currProcess)) {
 				scheduler(PRO_CON_INTERRUPT);
 			}
 			break;
 		case unlockTrap :
 			//if unlock, then call the pair's mutex to unlock
-			MutexUnlock(PCBGetPRData(currProcess)->mutex, currProcess);
+			MutexUnlock(mutexes[PCBGetPRData(currProcess)->mutex], currProcess);
 			PCBSetState(currProcess, ready);
 			break;
 		case signalTrap :
 			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
-			PcbPtr returned = ProConSignal(currProcess);
+			returned = ProConSignal(currProcess);
 			if (returned) {
 				fifoQueueEnqueue(readyProcesses, returned);
 			}
@@ -327,7 +362,7 @@ void genProducerConsumerPairs() {
 	PcbPtr Consumer;
 	int i;
 
-	for (i = 0; i < NEW_PC_PROCS; i++) {
+	for (i = 0; i < PC_PROCS; i++) {
 		Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
 		Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
 
@@ -477,6 +512,7 @@ int main(void) {
 	terminatedProcesses = fifoQueueConstructor();
 	device1 = DeviceConstructor();
 	device2 = DeviceConstructor();
+	//mutexes = (MutexPtr) malloc(sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2));
 
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
