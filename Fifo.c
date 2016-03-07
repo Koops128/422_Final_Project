@@ -83,6 +83,18 @@ void fifoQueueDestructor(FifoQueue ** queue_p) {
 
 }
 
+int fifoQueueContains(FifoQueue *queue, PcbPtr check) {
+	Node * node = queue->head;
+	int i = 1;
+	while(node != NULL) {
+		if (node->content == check)
+			return i;
+		node = node->next;
+		i++;
+	}
+	return -1;
+}
+
 void fifoQueueEnqueue(FifoQueue *queue, PcbPtr pcb) {
 	if (pcb == NULL) {
 		printf("pcb is null");
