@@ -31,7 +31,7 @@ typedef struct PCB {
 
 	RelationshipPtr relationship;
 
-	union {
+	union PairData{
 		MRDataPtr MutRecData;
 		PCDataPtr ProConData;
 	} PairDataStr;
@@ -200,29 +200,74 @@ void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
 	}
 }
 
-void genPCIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
-	int partitionSize = (maxVal - minVal) / n;	// truncate if the division results in a double
-	int i;
-	for(i = 0; i < n; i++) {
-		int randNum;
-		int isOk;
-		do {
-			randNum = (rand() % (partitionSize)) + (i * partitionSize);
-			isOk = 1;
-			int i = 0;
-			for (i = 0; i < PC_LOCK_UNLOCK; i++) {
-				if (randNum >= pcb->relationship->StepsStr.pcSteps->lock[i] &&
-						randNum <= pcb->relationship->StepsStr.pcSteps->unlock[i]) {
-					isOk = 0;
-				}
-			}
-		} while(!isOk);
-		storage[i] = randNum;
-	}
-}
+//void genPCIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
+//	int partitionSize = (maxVal - minVal) / n;	// truncate if the division results in a double
+//	int i;
+//	for(i = 0; i < n; i++) {
+//		int randNum;
+//		int isOk;
+//		do {
+//			randNum = (rand() % (partitionSize)) + (i * partitionSize);
+//
+//
+//			printf("\nlock %d randNum %d unlock %d\n", pcb->relationship->StepsStr.pcSteps->lock[i],
+//					randNum, pcb->relationship->StepsStr.pcSteps->unlock[i]);
+//
+//			isOk = 1;
+//			int i = 0;
+//			for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+//				if (randNum >= pcb->relationship->StepsStr.pcSteps->lock[i] &&
+//						randNum <= pcb->relationship->StepsStr.pcSteps->unlock[i]) {
+//					isOk = 0;
+//				}
+//			}
+//		} while(!isOk);
+//		storage[i] = randNum;
+//	}
+//}
 
 void genMRIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
 
+}
+
+/*Helper method to generate the step instructions for producer/consumer PCBs*/
+void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal, 
+		unsigned int* io1, unsigned int* io2) {
+	int numTraps = NUM_IO_TRAPS * 2 + PC_LOCK_UNLOCK * 2 + PC_WAIT + PC_SIGNAL;
+	unsigned int* allTraps = malloc(sizeof(unsigned int) * numTraps);
+	int partitionSize = (MAX_PC - 1) / numTraps;
+	int i;
+	for(i = 0; i < numTraps; i++) {
+		int randNum = (rand() % (partitionSize)) + (i * partitionSize);
+		allTraps[i] = randNum;
+//		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
+//			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
+//		}
+
+	}
+
+	lock[0] = allTraps[2];
+	lock[1] = allTraps[7];
+	unlock[0] = allTraps[4];
+	unlock[1] = allTraps[9];
+	wait[0] = allTraps[3];
+	signal[0] = allTraps[8];
+
+	io1[0] = allTraps[0];
+	io1[1] = allTraps[5];
+	io1[2] = allTraps[10];
+	io1[3] = allTraps[12];
+
+	io2[0] = allTraps[1];
+	io2[1] = allTraps[6];
+	io2[2] = allTraps[11];
+	io2[3] = allTraps[13];
+		//The wait instruction is somewhere between the first lock/unlock pair
+		//the signal instruction is somewhere between the second lock/unlock pair
+//	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
+//	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
+
+	free(allTraps);
 }
 
 PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
@@ -241,32 +286,33 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 	pcb->relationship = (RelationshipPtr) malloc(sizeof(RelationshipStr));
 	pcb->relationship->mType = theType;
 
-	unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
-
 	if (theType == producer || theType == consumer) {
+		pcb->relationship->StepsStr.pcSteps = (PCStepsPtr) malloc(sizeof(ProdConsStepsStr));
+
 		pcb->relationship->mPartner = partner;
 		setPCTraps(pcb->relationship->StepsStr.pcSteps->lock, pcb->relationship->StepsStr.pcSteps->unlock,
-				pcb->relationship->StepsStr.pcSteps->wait, pcb->relationship->StepsStr.pcSteps->signal);
+				pcb->relationship->StepsStr.pcSteps->wait, pcb->relationship->StepsStr.pcSteps->signal,
+				pcb->IO_1_Traps, pcb->IO_2_Traps);
 
-		genPCIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
+		//genPCIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
 	} else if (theType == mutrecA || theType == mutrecB) {
 		pcb->relationship->mPartner = partner;
 		//TODO set traps for mutual resources
 
-		genMRIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
+		//genMRIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
 	} else {
+		unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
 		genTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC);
+		int i;
+		for (i = 0; i < NUM_IO_TRAPS; i++) {
+			pcb->IO_1_Traps[i] = allTraps[i*2];		//grab even indices
+			pcb->IO_2_Traps[i] = allTraps[(i*2) + 1]; //grab odd indices
+		}
+
+		free(allTraps);
 	}
 
 	//genIOArrays(pcb);
-
-	int i;
-	for (i = 0; i < NUM_IO_TRAPS; i++) {
-		pcb->IO_1_Traps[i] = allTraps[i*2];		//grab even indices
-		pcb->IO_2_Traps[i] = allTraps[(i*2) + 1]; //grab odd indices
-	}
-
-	free(allTraps);
 
 	return pcb;
 }
@@ -334,29 +380,6 @@ void PCBDestructor(PcbPtr pcb) {
 	pcb = NULL;	//Only locally sets the pointer to null
 }
 
-/*Helper method to generate the step instructions for producer/consumer PCBs*/
-void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
-	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
-	int partitionSize = (MAX_PC - 1) / 4;
-	int i;
-	for(i = 0; i < 4; i++) {
-		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
-		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-		}
-	}
-	lock[0] = LockUnlock[0];
-	lock[1] = LockUnlock[2];
-	unlock[0] = LockUnlock[1];
-	unlock[1] = LockUnlock[3];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
-
-	free(LockUnlock);
-}
-
 /* this is different than waiting for a mutex.
  * This should unlock the mutex it’s holding… it should be holding one since a wait should only be inside a critical section,
  * then return an int (1 or 0) saying whether this PCB needs to wait or not.
@@ -403,4 +426,56 @@ PcbPtr ProConSignal(PcbPtr signaler) {
 	return toReturn;
 }
 
+int main(void) {
+	srand(time(NULL));
 
+	PcbPtr Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+	PcbPtr Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+
+	PCBConstructor(Producer, producer, Consumer);
+	PCBSetID(Producer, 1);
+	PCBSetPriority(Producer, rand() % 16);
+	printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+
+	PCBConstructor(Consumer, consumer, Producer);
+	PCBSetID(Consumer, 2);
+	PCBSetPriority(Consumer, rand() % 16);
+	printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+
+	int i;
+	printf("\nProducer steps\n");
+	PCStepsPtr pcSteps = PCBGetPCSteps(Producer);
+	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+		printf("Lock: %d\n", pcSteps->lock[i]);
+		printf("Wait: %d\n", pcSteps->wait[0]);
+		printf("Signal: %d\n", pcSteps->signal[0]);
+		printf("Unlock: %d\n", pcSteps->unlock[i]);
+	}
+
+//	printf("\nConsumer steps\n");
+//	pcSteps = PCBGetPCSteps(Consumer);
+//	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+//		printf("Lock: %d\n", pcSteps->lock[i]);
+//		printf("Wait: %d\n", pcSteps->wait[0]);
+//		printf("Signal: %d\n", pcSteps->signal[0]);
+//		printf("Unlock: %d\n", pcSteps->unlock[i]);
+//	}
+
+	printf("\nProducer IO 1 steps\n");
+	for (i = 0; i < NUM_IO_TRAPS; i++) {
+		printf("IO 1: %d\n", PCBGetIO1Trap(Producer, i));
+	}
+	printf("\nProducer IO 2 steps\n");
+	for (i = 0; i < NUM_IO_TRAPS; i++) {
+		printf("IO 2: %d\n", PCBGetIO2Trap(Producer, i));
+	}
+
+//	printf("\nConsumer IO 1 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 1: %d\n", PCBGetIO1Trap(Consumer, i));
+//	}
+//	printf("\nConsumer IO 2 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 2: %d\n", PCBGetIO2Trap(Consumer, i));
+//	}
+}
