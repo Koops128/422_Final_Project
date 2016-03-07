@@ -200,6 +200,31 @@ void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
 	}
 }
 
+void genPCIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
+	int partitionSize = (maxVal - minVal) / n;	// truncate if the division results in a double
+	int i;
+	for(i = 0; i < n; i++) {
+		int randNum;
+		int isOk;
+		do {
+			randNum = (rand() % (partitionSize)) + (i * partitionSize);
+			isOk = 1;
+			int i = 0;
+			for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+				if (randNum >= pcb->relationship->StepsStr.pcSteps->lock[i] &&
+						randNum <= pcb->relationship->StepsStr.pcSteps->unlock[i]) {
+					isOk = 0;
+				}
+			}
+		} while(!isOk);
+		storage[i] = randNum;
+	}
+}
+
+void genMRIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
+
+}
+
 PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 	//TODO modify the constructor to make a relationship type
 
@@ -213,10 +238,27 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 	pcb->terminate = rand()%10;	//ranges from 0-10
 	pcb->term_count = 0;
 
-	//genIOArrays(pcb);
+	pcb->relationship = (RelationshipPtr) malloc(sizeof(RelationshipStr));
+	pcb->relationship->mType = theType;
 
 	unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
-	genTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC);
+
+	if (theType == producer || theType == consumer) {
+		pcb->relationship->mPartner = partner;
+		setPCTraps(pcb->relationship->StepsStr.pcSteps->lock, pcb->relationship->StepsStr.pcSteps->unlock,
+				pcb->relationship->StepsStr.pcSteps->wait, pcb->relationship->StepsStr.pcSteps->signal);
+
+		genPCIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
+	} else if (theType == mutrecA || theType == mutrecB) {
+		pcb->relationship->mPartner = partner;
+		//TODO set traps for mutual resources
+
+		genMRIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
+	} else {
+		genTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC);
+	}
+
+	//genIOArrays(pcb);
 
 	int i;
 	for (i = 0; i < NUM_IO_TRAPS; i++) {
@@ -330,15 +372,6 @@ int ProConWait(PcbPtr waiter) {
 		return 1;//is waiting
 	}
 	return 0;//is not waiting
-
-//	if ((waiter == procon->Producer && procon->bufavail == 0)
-//		|| (waiter == procon->Consumer && procon->bufavail == MAX_SHARED_SIZE)) {
-//
-//		procon->isWaiting = 1;
-//		MutexUnlock(procon->mutex, waiter);
-//		return 1;
-//	}
-//	return 0;
 }
 
 /* The way this will work, is this is doing the “producing” and “consuming” work while at the same time signaling.
@@ -354,53 +387,20 @@ int ProConWait(PcbPtr waiter) {
 
 PcbPtr ProConSignal(PcbPtr signaler) {
 	PcbPtr toReturn = NULL;
-	if (1/*(shared variable is currently empty
+	if (0/*(shared variable is currently empty
 	 	 	|| shared variable is currently full) && partner is waiting*/) {
 		toReturn = signaler->relationship->mPartner;
 		//take the partner out of the condition variable's waiting queue?
 
 	}
 	if (signaler->relationship->mType == producer) {
-		//increase availability of shared resource
-	} else {
+		//Put something in the shared resource
 		//decrease availability of shared resource
+	} else {
+		//Take something out of the shared resource
+		//increase availability of shared resource
 	}
-
-//	if (signaler == procon->Producer) {
-//		if (procon->bufavail == MAX_SHARED_SIZE && procon->isWaiting) {
-//			procon->isWaiting = 0;
-//			toReturn = procon->Consumer;
-//		}
-//		procon->bufavail --;
-//	} else {
-//		if (procon->bufavail == 0 && procon->isWaiting) {
-//			procon->isWaiting = 0;
-//			toReturn = procon->Producer;
-//		}
-//		procon->bufavail ++;
-//	}
 	return toReturn;
 }
 
-//MUTEX STUFF
-typedef struct Mutex{
-	PcbPtr owner;
-	FifoQueue * waitQ;
-}MutexStr;
 
-void MutexDestructor(MutexPtr mutex) {
-	fifoQueueDestructor(&mutex->waitQ);
-	PCBDestructor(mutex->owner);
-
-	free(mutex);
-	mutex = NULL;	//locally
-}
-
-//Returns 1 or 0, 1 if the process got ahold of the lock, 0 if not
-int MutexLock(MutexPtr mutex, PcbPtr pcb) {
-	//TODO
-}
-
-void MutexUnlock(MutexPtr mutex, PcbPtr pcb) {
-	//TODO
-}
