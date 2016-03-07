@@ -20,6 +20,7 @@
 #include "Pcb.h"
 #include "Fifo.h"
 #include "Device.h"
+#include "Mutex.c"
 #include "Mutex.h"
 #include "PriorityQueue.h"
 
@@ -48,7 +49,8 @@ FifoQueue* terminatedProcesses;
 PcbPtr currProcess;
 Device* device1;
 Device* device2;
-
+MutexPtr MutRay[]; //Array of Mutexes
+int MutRaySize;
 
 /*Prepares the waiting process to be executed.*/
 void dispatcher() {
@@ -110,6 +112,82 @@ void scheduler(int interruptType) {
 	default :
 		break;
 	}
+}
+
+/*
+ *
+ * PcbPtr owner, the owner pcb that has a lock
+ * PcbPtr ch, checking if this locked pcb is being circularly locked
+ * by itself owner; deadlocked
+ * int j index of pcb being checked in Mutex wait queue
+ * int i index of Mutex being checked in MutRay
+ */
+int mutexContainsLock(PcbPtr owner, PcbPtr ch, int j, int i) {
+	if (owner == ch) //locked by itself
+		return 0;
+	int k = 0;
+	for (k = 0; k < MutRaySize; k++) {
+		if (k != i && MutRay[k]->owner != NULL) { //don't check same mutex && other mutex has owner
+			int z;
+
+		}
+	}
+}
+
+/**
+ * Checks if the pcb is locked by another pcb
+ * and returns the MutRay index if it is, -1 otherwise
+ */
+int isLocked(PcbPtr owner) {
+	int i, j;
+	for (i = 0; i < MutRaySize; i++) {
+		MutexPtr m = MutRay[i];
+		if (m->owner != NULL && m->waitQ != NULL) {
+			for (j = 0; j < m->waitQ->size; j++) {
+				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex index
+					return i;
+				}
+			}
+		}
+	}
+	return -1;
+}
+
+/*
+ * Checks the line of pcbs being locked
+ *
+ * PcbPtr owner the pcb being checked
+ * Returns 1 if pcb is deadlocked, 0 otherwise
+ */
+int checkLock(PcbPtr owner) {
+	int v = isLocked(owner);
+	PcbPtr *parent;
+	while (v != -1) {//check what its locked by repeatedly
+		if (owner == MutRay[v]->owner) { //locked by itself
+			return 1;
+		}
+		*parent = MutRay[v]->owner;
+
+	}
+	return 0;
+}
+
+/**
+ * Returns 1 if true 0 otherwise
+ */
+int deadlockDetect() {
+	int i, r;
+	for (i = 0; i < MutRaySize; i++) {
+		if (MutRay[i]->owner != NULL) {
+			r = checkLock(MutRay[i]->owner);
+			if (r == 1) {
+				printf("\r\nDeadlock detected for process %d", PCBGetID(MutRay[i]->owner));
+				return 1;
+			}
+		}
+	}
+	printf("\r\nno deadlock detected");
+	return 0;
 }
 
 /*Saves the state of the CPU to the currently running PCB.*/
