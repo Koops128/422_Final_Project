@@ -17,9 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
 #include "Pcb.h"
-#include "IoPcb.h"
 #include "Fifo.h"
 
 //defines
@@ -213,12 +211,12 @@ int checkIORequest(int devnum) {
 	if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
 		if (devnum == 1) { //look through array 1
 			for (i=0; i < NUM_IO_TRAPS; i++) {
-				requestMade = IoPCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
+				requestMade = PCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
 			}
 		}
 		else if (devnum == 2) { //look through array 2
 			for (i=0; i < NUM_IO_TRAPS; i++) {
-				requestMade = IoPCBGetIO2Trap(currProcess, i) == sysStackPC ? 1: requestMade;
+				requestMade = PCBGetIO2Trap(currProcess, i) == sysStackPC ? 1: requestMade;
 			}
 		}
 	}
@@ -254,7 +252,7 @@ void genProcesses() {
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
-		newProc = IoPCBConstructor();
+		newProc = PCBConstructor();
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
 			currPID++;
@@ -366,7 +364,7 @@ int main(void) {
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
 	//An initial process to start with
-	currProcess = IoPCBConstructor();
+	currProcess = PCBConstructor();
 	if(currProcess != NULL)	// Remember to call the destructor when finished using newProc
 	{
 		PCBSetID(currProcess, currPID);
