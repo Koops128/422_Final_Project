@@ -37,7 +37,7 @@ typedef MutexStr* MutexPtr;
 /*                           CONSTRUCTOR, DESTRUCTOR                             */
 /*********************************************************************************/
 
-MutexPtr MutexConstructor();
+MutexPtr MutexConstructor(int id);
 void MutexDestructor(MutexPtr* mutex);
 
 /*********************************************************************************/
