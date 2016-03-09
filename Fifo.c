@@ -83,6 +83,18 @@ void fifoQueueDestructor(FifoQueue ** queue_p) {
 
 }
 
+int fifoQueueContains(FifoQueue *queue, PcbPtr check) {
+	Node * node = queue->head;
+	int i = 1;
+	while(node != NULL) {
+		if (node->content == check)
+			return i;
+		node = node->next;
+		i++;
+	}
+	return -1;
+}
+
 void fifoQueueEnqueue(FifoQueue *queue, PcbPtr pcb) {
 	if (pcb == NULL) {
 		printf("pcb is null");
@@ -139,6 +151,12 @@ int fifoQueueIsEmpty(FifoQueue * queue) {
 int fifoQueueSize() {
 	return sizeof(FifoQueue);
 }
+
+//TODO delete or do
+///*Filters out all PCBs for which the given function is true, and returns the result.*/
+//void fifoFilter() {
+//
+//}
 
 char * fifoQueueToString(FifoQueue * queue) {
 	char * string = malloc(sizeof(char) * (queue->size * 4 + 500));
