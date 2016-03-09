@@ -17,9 +17,23 @@
 #ifndef PCB_H_
 #define PCB_H_
 
-#include "ProducerConsumer.h"
+//#include "ProdConsObj.h"
 
 #define NUM_IO_TRAPS 4
+#define MAX_PC 200
+
+//PRODUCER CONSUMER DEFINES
+#define PC_LOCK_UNLOCK 2
+#define PC_WAIT 1
+#define PC_SIGNAL 1
+#define MAX_SHARED_SIZE 5
+
+//SHARED RESOURCE DEFINES
+#define SR_LOCK_UNLOCK 			2
+#define NUM_MUTEX_STEPS 		4
+
+//SHARED RESOURCE DEFINES
+#define SR_LOCK_UNLOCK 2
 
 typedef enum {
 	created=0,
@@ -30,14 +44,57 @@ typedef enum {
 	terminated=5
 } State;
 
+typedef enum {
+	none=0,
+	producer=1,
+	consumer=2,
+	mutrecA=3,
+	mutrecB=4
+} RelationshipType;
 
 typedef struct PCB* PcbPtr;
 
-PcbPtr ProducerConsumerPCBConstructor(PC *procon);
+typedef struct Relationship* RelationshipPtr;
+typedef struct mutRecPairSteps* MRStepsPtr;
+typedef struct prodConsPairSteps* PCStepsPtr;
+typedef struct MRData* MRDataPtr;
+typedef struct PCData* PCDataPtr;
 
-//JUST ADDING METHOD STUBS FOR NOW
-PcbPtr ProducerPCBConstructor(ProConPtr procon);
-PcbPtr ConsumerPCBConstructor(ProConPtr procon);
+//typedef struct Mutex* MutexPtr;
+
+typedef struct mutRecPairSteps {
+	unsigned int lock1[NUM_MUTEX_STEPS];
+	unsigned int unlock1[NUM_MUTEX_STEPS];
+	unsigned int lock2[NUM_MUTEX_STEPS];
+	unsigned int unlock2[NUM_MUTEX_STEPS];
+} MutRecStepsStr;
+
+typedef struct prodConsPairSteps {
+	unsigned int lock[PC_LOCK_UNLOCK];
+	unsigned int unlock[PC_LOCK_UNLOCK];
+	unsigned int signal[PC_SIGNAL];
+	unsigned int wait[PC_WAIT];
+} ProdConsStepsStr;
+
+typedef struct Relationship{
+	RelationshipType mType;
+	PcbPtr mPartner;
+	union Steps{
+		MRStepsPtr mrSteps;
+		PCStepsPtr pcSteps;
+	} StepsStr;
+}RelationshipStr;
+
+typedef struct MRData{
+	int mutex1;
+	int mutex2;
+} MRDataStr;
+
+typedef struct PCData{
+	int mutex;
+	//condition var 1
+	//condition var 2
+} PCDataStr;
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
@@ -75,6 +132,11 @@ void PCBSetTerminate(PcbPtr pcb, int newTerminate);
 
 void PCBSetTermCount(PcbPtr pcb, unsigned int newTermCount);
 
+void PCBSetStarveBoostFlag(PcbPtr pcb, int flag);
+void PCBSetLastQuantum(PcbPtr pcb, unsigned int quantum);
+
+void PCBProdConsSetMutex(PcbPtr pcb, int mutex);
+
 /**
  * Returns PC of this PCB.
  */
@@ -105,7 +167,22 @@ int PCBGetTerminate(PcbPtr pcb);
 
 unsigned int PCBGetTermCount(PcbPtr pcb);
 
-PcbPtr PCBConstructor();
+RelationshipPtr PCBGetRelationship(PcbPtr pcb);
+
+MRStepsPtr PCBGetMRSteps(PcbPtr pcb);
+
+PCStepsPtr PCBGetPCSteps(PcbPtr pcb);
+
+MRDataPtr PCBGetMRData(PcbPtr pcb);
+
+PCDataPtr PCBGetPCData(PcbPtr pcb);
+
+int PCBGetStarveBoostFlag(PcbPtr pcb);
+int PCBGetLastQuantum(PcbPtr pcb);
+
+PcbPtr PCBConstructor(PcbPtr thisPcb, RelationshipType theType, PcbPtr partner);
+
+PcbPtr PCBAllocateSpace();
 
 /**
  * Returns a string representation of this PCB.
@@ -116,5 +193,19 @@ char *PCBToString(PcbPtr pcb);
  * Deallocates all memory references that are kept within the PCB, and then frees the PCB passed in.
  */
 void PCBDestructor(PcbPtr pcb);
+
+int ProConWait(PcbPtr waiter);
+
+PcbPtr ProConSignal(PcbPtr signaler);
+
+/*********************************************************************************/
+/*                          	 Mutex Related			                         */
+/*********************************************************************************/
+void PCBSetMutexLockSteps(PcbPtr pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]);
+void PCBSetMutexUnlockSteps(PcbPtr pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]);
+int isMutexLockStep(PcbPtr pcb, int mutexNum, unsigned int theStep);
+int isMutexUnlockStep(PcbPtr pcb, int mutexNum, unsigned int theStep);
+void PCBSetMutexIndex(PcbPtr pcb, int mutexNum, int index);
+int PCBGetMutexIndex(PcbPtr pcb, int mutexNum);
 
 #endif /* PCB_H_ */
