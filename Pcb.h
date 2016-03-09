@@ -82,13 +82,10 @@ typedef struct Relationship{
 typedef struct MRData{
 	int mutex1;
 	int mutex2;
-	//MutexPtr mutex1;
-	//MutexPtr mutex2;
 } MRDataStr;
 
 typedef struct PCData{
 	int mutex;
-	//MutexPtr mutex;
 	//condition var 1
 	//condition var 2
 } PCDataStr;
@@ -129,6 +126,8 @@ void PCBSetTerminate(PcbPtr pcb, int newTerminate);
 
 void PCBSetTermCount(PcbPtr pcb, unsigned int newTermCount);
 
+void PCBProdConsSetMutex(PcbPtr pcb, int mutex);
+
 /**
  * Returns PC of this PCB.
  */
@@ -167,7 +166,7 @@ PCStepsPtr PCBGetPCSteps(PcbPtr pcb);
 
 MRDataPtr PCBGetMRData(PcbPtr pcb);
 
-PCDataPtr PCBGetPRData(PcbPtr pcb);
+PCDataPtr PCBGetPCData(PcbPtr pcb);
 
 PcbPtr PCBConstructor(PcbPtr thisPcb, RelationshipType theType, PcbPtr partner);
 
@@ -186,14 +185,5 @@ void PCBDestructor(PcbPtr pcb);
 int ProConWait(PcbPtr waiter);
 
 PcbPtr ProConSignal(PcbPtr signaler);
-
-//MUTEX STUFF
-//MutexPtr MutexConstructor();
-//
-//void MutexDestructor(MutexPtr mutex);
-//
-//void MutexLock(MutexPtr mutex, PcbPtr pcb);
-//
-//void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
 
 #endif /* PCB_H_ */
