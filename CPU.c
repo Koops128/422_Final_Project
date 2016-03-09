@@ -26,45 +26,110 @@
 //defines
 #define TIMER_INTERRUPT 1
 #define TERMINATE_INTERRUPT 2
+#define PRO_CON_INTERRUPT 5
 #define IO_REQUEST 3
 #define IO_COMPLETION 4
 #define TIMER_QUANTUM 500
 #define NEW_PROCS		6
+#define PC_PROCS	1
+#define MR_PROCS	1
 #define PRIORITY_LEVELS 16
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
-
+#define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
+#define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
+#define BLOCKED_BY_LOCK 	7
+#define LOCK_UNBLOCK
+#define NUM_MUT_REC_PAIRS 1//5
+#define NUM_MUTEXES		  NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 
 //Global variables
 int currPID; //The number of processes created so far. The latest process has this as its ID.
-//int timerCount; //the counter for timer interrupts
-/*int io1Count; //the counter for I/O 1
-int io2Count; //the counter for I/O 2*/
 int timerCount;
+int simCounter;
 unsigned int sysStackPC;
+unsigned int currQuantum;
 FifoQueue* newProcesses;
-FifoQueue* readyProcesses;
+PQPtr readyProcesses;
 FifoQueue* terminatedProcesses;
 PcbPtr currProcess;
 Device* device1;
 Device* device2;
-MutexPtr MutRay[]; //Array of Mutexes
-int MutRaySize;
+MutexPtr mutexes[sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2)];
+CondVarPtr condVars[sizeof(CondVarStr) * PC_PROCS * 2];
+
+typedef enum {
+	lockTrap=0,
+	unlockTrap=1,
+	waitTrap=2,
+	signalTrap=3,
+	noTrap=4
+} ProdConsTrapType;
 
 /*Prepares the waiting process to be executed.*/
 void dispatcher() {
-	currProcess = fifoQueueDequeue(readyProcesses);
-	//if (readyProcesses->size > 0) {
+	currProcess = pqDequeue(readyProcesses);
 	if (currProcess) {
-		//currProcess = fifoQueueDequeue(readyProcesses);
 		PCBSetState(currProcess, running);
 		sysStackPC = PCBGetPC(currProcess);
 
 		printf("PID %d was dispatched\r\n\r\n", PCBGetID(currProcess));
 	} else {
-		//currProcess = NULL;
 		printf("Ready queue is empty, no process dispatched\r\n\r\n");
 	}
+}
+
+/*=================================================
+ *				Starvation Detection
+ *=================================================*/
+/*	A process is "starving" if it hasn't run for (numProcessesInQueue)*(priorityLevel)
+ *  quantums. Appropriately, more processes in the system means each process is expected
+ *  to get less time to run. Also, lower priority level means we expect the process not
+ *  to have run for a longer time.
+ *  A "baseline" would be equal running time for each process, so we would expect a process
+ *  not to have run for (numProcessesInQueue) quantums before promoting it. Multiplying by
+ *  the priority level is thus a way to weight this so lower priority processes aren't
+ *  expected to get as much CPU time as higher priority ones.
+ */
+void runStarvationDetector() {
+	//sum up number of processes
+	int i, numProcs = 0;
+	printf("\n---Running S Detector---\n");
+	for (i = 0; i < PRIORITY_LEVELS; i++) {
+		numProcs += ((readyProcesses->priorityArray)[i])->size;
+		printf("Queue %d has %d processes\n", i, ((readyProcesses->priorityArray)[i])->size);
+	}
+
+	//Check head of each priority level (besides top) and see if it needs boosting
+	//Check head of each priority level (except last) and see if it needs to go back to original level.
+	//(Only check heads since going through the entire queues would be a lot of overhead)
+	for (i = 0; i < PRIORITY_LEVELS; i++) {
+		FifoQueue* fq = (readyProcesses->priorityArray)[i];
+		if (fq) {
+			PcbPtr pcb = fifoQueuePeek(fq);
+			if (pcb) {
+				//test if should be demoted
+				if (i < (PRIORITY_LEVELS -1) && PCBGetStarveBoostFlag(pcb)) {
+					//toggle flag and demote to lower level.
+					PCBSetPriority(pcb, i + 1);
+					PCBSetStarveBoostFlag(pcb, 0);
+				}
+				//	Test if should be promoted
+				if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
+					int threshold = numProcs * (i+1);
+					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
+					if (cyclesSinceRan > threshold ) {
+						PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
+						PCBSetStarveBoostFlag(pcb, 1);
+						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
+
+						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue, PID %d priority went from %d to %d.\n", cyclesSinceRan, numProcs, PCBGetID(pcb), i, i-1);
+					}
+				}
+			}
+		}
+	}
+	printf("---Exiting S Detector---\n");
 }
 
 //Scheduler
@@ -75,7 +140,6 @@ void scheduler(int interruptType) {
 		PcbPtr pcb = fifoQueueDequeue(newProcesses);
 		PCBSetState(pcb, ready);
 		fifoQueueEnqueue(readyProcesses, pcb);
-		//fprintf(outFilePtr, "%s\r\r\n", PCBToString(pcb));
 	}
 
 	switch (interruptType) {
@@ -97,74 +161,31 @@ void scheduler(int interruptType) {
 		break;
 	case IO_REQUEST :
 		//set currProccess back to running
-		if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
+		if (currProcess) {
 			PCBSetState(currProcess, running);
 		} else {
 			dispatcher();
 		}
 		break;
 	case IO_COMPLETION :
-		if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
+		if (currProcess) {
+			dispatcher();
+		}
+		break;
+	case PRO_CON_INTERRUPT :
+		if (currProcess) {
+			dispatcher();
+		}
+		break;
+	case BLOCKED_BY_LOCK :
+		if (currProcess) {
+			PCBSetPC(currProcess, sysStackPC); //save it's pc, but don't put in ready queue; the mutex wait queue is holding it.
 			dispatcher();
 		}
 		break;
 	default :
 		break;
 	}
-}
-
-/**
- * Checks if the pcb is locked by another pcb
- * and returns the Mutex owner pcb if it is, null otherwise
- */
-PcbPtr isLocked(PcbPtr owner) {
-	int i, j;
-	for (i = 0; i < MutRaySize; i++) {
-		MutexPtr m = MutRay[i];
-		if (m->owner != NULL && MutexHasWaiting(m)) {
-			for (j = 0; j < m->waitQ->size; j++) {
-				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
-					return m->owner;
-				}
-			}
-		}
-	}
-	return NULL;
-}
-
-/*
- * Checks the chain of pcbs being locked by this pcb
- *
- * PcbPtr owner the pcb being checked
- * Returns 1 if pcb is deadlocked, 0 otherwise
- */
-int checkLock(PcbPtr owner) {
-	PcbPtr parent = isLocked(owner);
-	while (parent != NULL) {//check what its locked by repeatedly
-		if (owner == parent) { //locked by lock itself is locking
-			return 1;
-		}
-		parent = isLocked(parent);//else check what that pcb is locked by
-	}
-	return 0; //pcb is not locked, chain is done
-}
-
-/**
- * Returns 1 if true 0 otherwise
- */
-int deadlockDetect() {
-	int i, r;
-	for (i = 0; i < MutRaySize; i++) {
-		if (MutRay[i]->owner != NULL) {
-			r = checkLock(MutRay[i]->owner);
-			if (r == 1) {
-				printf("\r\nDeadlock detected for process %d", PCBGetID(MutRay[i]->owner));
-				return 1;
-			}
-		}
-	}
-	printf("\r\nno deadlock detected");
-	return 0;
 }
 
 /*Saves the state of the CPU to the currently running PCB.*/
@@ -198,7 +219,7 @@ int setIOTimer(Device* device) {
  * The interrupt service routine for a IO interrupt
  * Does it still have to save Cpu state to Pcb? */
 void IO_ISR(int numIO) {	//IOCompletionHandler
-	if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
+	if (currProcess) {
 		saveCpuToPcb();
 		PCBSetState(currProcess, interrupted);
 	}
@@ -219,8 +240,6 @@ void IO_ISR(int numIO) {	//IOCompletionHandler
 		}
 	}
 	fifoQueueEnqueue(readyProcesses, pcb);
-	//put current process into ready queue
-	//fifoQueueEnqueue(readyProcesses, currProcess);
 	PCBSetState(pcb, ready);
 
 	printf("PID %d put in ready queue\r\n\r\n", PCBGetID(pcb));
@@ -243,14 +262,55 @@ void IOTrapHandler(Device* d) {
 		setIOTimer(d);
 	}
 	scheduler(IO_COMPLETION);
-	//dispatcher();
+}
+
+/*returns 0 if no context switch, 1 if context switch*/
+int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
+	saveCpuToPcb();
+	PCBSetState(currProcess, blocked);
+	PcbPtr returned;
+	int contextSwitch = 0; //0 for no context switch, 1 for context switch
+
+	switch(trapRequest) {
+		case lockTrap :
+			//if lock, then call the pair's mutex for a lock.  If it needs to wait for the lock,
+			//then call the scheduler with an interrupt
+			if(!MutexLock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess)) {
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			}
+			break;
+		case unlockTrap :
+			//if unlock, then call the pair's mutex to unlock
+			MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
+			PCBSetState(currProcess, ready);
+			break;
+		case signalTrap :
+			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
+			returned = ProConSignal(currProcess);
+			if (returned) {
+				fifoQueueEnqueue(readyProcesses, returned);
+			}
+			PCBSetState(currProcess, ready);
+			break;
+		case waitTrap :
+			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
+			if (ProConWait(currProcess)) {
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			}
+			break;
+		default:
+			break;
+	}
+	return contextSwitch;
 }
 
 //returns 0 if there's no io request, nonzero if request was made.
 int checkIORequest(int devnum) {
 	int requestMade = 0;
 	int i;
-	if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
+	if (currProcess) {
 		if (devnum == 1) { //look through array 1
 			for (i=0; i < NUM_IO_TRAPS; i++) {
 				requestMade = PCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
@@ -263,6 +323,29 @@ int checkIORequest(int devnum) {
 		}
 	}
 	return requestMade;
+}
+
+ProdConsTrapType checkProdConsRequest() {
+	PCStepsPtr pcSteps = PCBGetPCSteps(currProcess);
+
+	int i;
+	if (currProcess) {
+		for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+			if (pcSteps->lock[i] == sysStackPC)
+				return lockTrap;
+			else if (pcSteps->unlock[i] == sysStackPC)
+				return unlockTrap;
+		}
+		for (i = 0; i < PC_WAIT; i++) {
+			if (pcSteps->wait[i] == sysStackPC)
+				return waitTrap;
+		}
+		for (i = 0; i < PC_SIGNAL; i++) {
+			if (pcSteps->signal[i] == sysStackPC)
+				return signalTrap;
+		}
+	}
+	return noTrap;
 }
 
 int checkIOInterrupt(Device* device) {
@@ -287,6 +370,117 @@ int timerCheck() {
 	}
 }
 
+/*=================================================
+ *				Deadlock Check
+ *=================================================*/
+
+/**
+ * Checks if the pcb is locked by another pcb
+ * and returns the Mutex owner pcb if it is, null otherwise
+ */
+PcbPtr isLocked(PcbPtr owner) {
+	int i, j;
+	for (i = 0; i < NUM_MUTEXES; i++) {
+		MutexPtr m = mutexes[i];
+		if (m->owner != NULL && MutexHasWaiting(m)) {
+			for (j = 0; j < m->waitQ->size; j++) {
+				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
+					return m->owner;
+				}
+			}
+		}
+	}
+	return NULL;
+}
+
+/*
+ * Checks the chain of pcbs being locked by this pcb
+ *
+ * PcbPtr owner the pcb being checked
+ * Returns 1 if pcb is deadlocked, 0 otherwise
+ */
+int checkLock(PcbPtr owner) {
+	PcbPtr parent = isLocked(owner);
+	while (parent != NULL) {//check what its locked by repeatedly
+		if (owner == parent) { //locked by lock itself is locking
+			return 1;
+		}
+		parent = isLocked(parent);//else check what that pcb is locked by
+	}
+	return 0; //pcb is not locked, chain is done
+}
+
+/**
+ * Returns 1 if true 0 otherwise
+ */
+int deadlockDetect() {
+	int i, r;
+	for (i = 0; i < NUM_MUTEXES; i++) {
+		if (mutexes[i]->owner != NULL) {
+			r = checkLock(mutexes[i]->owner);
+			if (r == 1) {
+				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
+				return 1;
+			}
+		}
+	}
+	printf("\r\nno deadlock detected\r\n");
+	return 0;
+}
+
+/*=================================================
+ *			Mutex Lock/Unlock Check
+ *=================================================*/
+
+/*Returns 1 if the current pcb a) got the lock or b) didn't want a lock. In this case,
+ *normal execution can continue.
+ *Returns 0 if the current pcb is blocked waiting for the lock. In this case, another process
+ *must take over execution.*/
+int notBlockedByLock() {
+	int notBlocked = 0;
+	MutexPtr selected = NULL;
+	if (isMutexLockStep(currProcess, 1, sysStackPC)) {
+		int index = PCBGetMutexIndex(currProcess, 1) % (NUM_MUTEXES); //Must put in parens since NUM_MUTEXES is an expression, not a value.
+		selected = mutexes[index];
+	} else if (isMutexLockStep(currProcess, 2, sysStackPC)) {
+		int index = PCBGetMutexIndex(currProcess, 2) % (NUM_MUTEXES);
+		selected = mutexes[index];
+	}
+	if (selected) {
+		notBlocked = MutexLock(selected, currProcess); //Wants lock; result depends on whether it was blocked.
+	} else {
+		notBlocked = 1; //Didn't want lock
+	}
+	return notBlocked;
+}
+
+/*If we're on an unlock step for the current pcb, then unlocks that mutex.
+ *If there was a pcb waiting for that mutex, then that pcb is returned;
+ *otherwise, null is returned.
+ *return: PcbPtr -- the PCB that was waiting for the lock; else, null.*/
+PcbPtr checkUnlock() {
+	PcbPtr unlockedPcb = NULL;
+	MutexPtr selected = NULL;
+	if (isMutexUnlockStep(currProcess, 1, sysStackPC)) {
+		selected = mutexes[PCBGetMutexIndex(currProcess, 1) % (NUM_MUTEXES)];
+	} else if (isMutexUnlockStep(currProcess, 2, sysStackPC)) {
+		selected = mutexes[PCBGetMutexIndex(currProcess, 2) % (NUM_MUTEXES)];
+	}
+	if (selected) {
+		MutexUnlock(selected, currProcess);
+		unlockedPcb = selected->owner; //NULL if none had been waiting
+	}
+	return unlockedPcb;
+}
+
+void printIfInCriticalSection() {
+	MutexPtr Mutex1 = mutexes[PCBGetMutexIndex(currProcess, 1)];
+	MutexPtr Mutex2 = mutexes[PCBGetMutexIndex(currProcess, 2)];
+	if (Mutex1->owner == currProcess && Mutex2->owner == currProcess) {
+		printf("~~PID %d is in critical section~~\n", PCBGetID(currProcess));
+	}
+}
+
 /*Randomly generates between 0 and 5 new processes and enqueues them to the New Processes Queue.*/
 void genProcesses() {
 	PcbPtr newProc;
@@ -294,13 +488,13 @@ void genProcesses() {
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
-		newProc = PCBConstructor();
+		newProc = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+		PCBConstructor(newProc, none, NULL);
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
 			currPID++;
 			PCBSetID(newProc, currPID);
 			PCBSetPriority(newProc, rand() % PRIORITY_LEVELS);
-			PCBSetState(newProc, created);
 			fifoQueueEnqueue(newProcesses, newProc);
 
 			printf("Process created: PID: %d at %lu\r\n", PCBGetID(newProc), PCBGetCreation(newProc));
@@ -309,228 +503,213 @@ void genProcesses() {
 	}
 }
 
-/*Helper method for genProducerConsumerPair*/
-void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
-	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
-	int partitionSize = (MAX_PC - 1) / 4;
+void genSharedResourcePairs() {
+	//TODO
+}
+
+void genProducerConsumerPairs() {
+	PcbPtr Producer;
+	PcbPtr Consumer;
 	int i;
-	for(i = 0; i < 4; i++) {
-		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
-		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-		}
+
+	//TODO create and add mutexes and condition variables for these pcbs.
+	for (i = 0; i < PC_PROCS; i++) {
+		Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+		Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+
+		PCBConstructor(Producer, producer, Consumer);
+		currPID++;
+		PCBSetID(Producer, currPID);
+		PCBSetPriority(Producer, rand() % PRIORITY_LEVELS);
+		fifoQueueEnqueue(newProcesses, Producer);
+		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+
+		PCBConstructor(Consumer, consumer, Producer);
+		currPID++;
+		PCBSetID(Consumer, currPID);
+		PCBSetPriority(Consumer, rand() % PRIORITY_LEVELS);
+		fifoQueueEnqueue(newProcesses, Consumer);
+		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
 	}
-	lock[0] = LockUnlock[0];
-	lock[1] = LockUnlock[2];
-	unlock[0] = LockUnlock[1];
-	unlock[1] = LockUnlock[3];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
-
-	free(LockUnlock);
-}
-
-void genProducerConsumerPair() {
-	//create the arrays we need
-	unsigned int* ProducerMutexLock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexLock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerMutexUnlock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexUnlock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerCondVarWait = malloc(sizeof(unsigned int) * PRO_WAIT);
-	unsigned int* ConsumerCondVarWait = malloc(sizeof(unsigned int) * CON_WAIT);
-	unsigned int* ProducerCondVarSignal = malloc(sizeof(unsigned int) * PRO_SIGNAL);
-	unsigned int* ConsumerCondVarSignal = malloc(sizeof(unsigned int) * CON_SIGNAL);
-
-	//hardcode the step instruction arrays
-		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
-	setPCTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
-	setPCTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
-
-	//Create the ProducerConsumer object
-	ProConPtr procon = ProducerConsumerConstructor(ProducerMutexLock, ConsumerMutexLock,
-												   ProducerMutexUnlock, ConsumerMutexUnlock,
-												   ProducerCondVarWait, ConsumerCondVarWait,
-												   ProducerCondVarSignal, ConsumerCondVarSignal);
-
-	//Create the producer and consumer PCB using the special PCB constructors
-	PcbPtr producer = ProducerPCBConstructor(procon);
-	PcbPtr consumer = ConsumerPCBConstructor(procon);
-
-	//set the procon object's producer and consumer PCBs
-	ProConSetProducer(producer, procon);
-	ProConSetConsumer(consumer, procon);
 
 }
 
-/*Helper method for genProducerConsumerPair*/
-void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal) {
-	unsigned int* LockUnlock = malloc(sizeof(unsigned int) * 4);
-	int partitionSize = (MAX_PC - 1) / 4;
-	int i;
-	for(i = 0; i < 4; i++) {
-		LockUnlock[i] = (rand() % (partitionSize)) + (i * partitionSize) + 1;
-		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
+void checkTimerInterrupt() {
+	if (timerCheck() == 1) {
+		genProcesses();
+		if (currProcess) {
+			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
+		} else {
+			printf("Timer interrupt: no current process is running, ");
 		}
-	}
-	lock[0] = LockUnlock[0];
-	lock[1] = LockUnlock[2];
-	unlock[0] = LockUnlock[1];
-	unlock[1] = LockUnlock[3];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
 
-	free(LockUnlock);
+		timerIsr();
+	}
 }
 
-void genProducerConsumerPair() {
-	//create the arrays we need
-	unsigned int* ProducerMutexLock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexLock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerMutexUnlock = malloc(sizeof(unsigned int) * PRO_LOCK_UNLOCK);
-	unsigned int* ConsumerMutexUnlock = malloc(sizeof(unsigned int) * CON_LOCK_UNLOCK);
-	unsigned int* ProducerCondVarWait = malloc(sizeof(unsigned int) * PRO_WAIT);
-	unsigned int* ConsumerCondVarWait = malloc(sizeof(unsigned int) * CON_WAIT);
-	unsigned int* ProducerCondVarSignal = malloc(sizeof(unsigned int) * PRO_SIGNAL);
-	unsigned int* ConsumerCondVarSignal = malloc(sizeof(unsigned int) * CON_SIGNAL);
+void checkIOInterrupts() {
+	//check if there has been an IO interrupt, if so call appropriate ioISR
+	if (checkIOInterrupt(device1) == 1) {
+		if (currProcess) {
+			printf("I/O 1 Completion interrupt: PID %d is running, ", PCBGetID(currProcess));
+		} else {
+			printf("I/O 1 Completion interrupt: no current process is running, ");
+		}
+		//call the IO service routine
+		IO_ISR(1);
+	}
 
-	//hardcode the step instruction arrays
-		//helper method assignes all the values for the producer OR consumer arrays... whichever ones are passed in
-	setLockUnlockTraps(ProducerMutexLock, ProducerMutexUnlock, ProducerCondVarWait, ProducerCondVarSignal);
-	setLockUnlockTraps(ConsumerMutexLock, ConsumerMutexUnlock, ConsumerCondVarWait, ConsumerCondVarSignal);
+	if (checkIOInterrupt(device2) == 1) {
+		if (currProcess) {
+			printf("I/O 1 Completion interrupt: PID %d is running, ", PCBGetID(currProcess));
+		} else {
+			printf("I/O 1 Completion interrupt: no current process is running.");
+		}
+		//call the IO service routine
+		IO_ISR(2);
+	}
+}
 
-	//Create the ProducerConsumer object
-	ProConPtr procon = ProducerConsumerConstructor(ProducerMutexLock, ConsumerMutexLock,
-							ProducerMutexUnlock, ConsumerMutexUnlock,
-							ProducerCondVarWait, ConsumerCondVarWait,
-							ProducerCondVarSignal, ConsumerCondVarSignal);
+//returns 0 or 1, 1 if the process has been terminated, 0 if not
+int checkTermCountAndTermination() {
+	if (currProcess && sysStackPC >= PCBGetMaxPC(currProcess)) {
+		PCBSetTermCount(currProcess, PCBGetTermCount(currProcess) + 1);
+		printf("\r\n");
+		//if TERM_COUNT = TERMINATE, then call terminateISR to put this process in the terminated list
+		if (PCBGetTermCount(currProcess) == PCBGetTerminate(currProcess)) {
 
-	//Create the producer and consumer PCB using the special PCB constructors
-	PcbPtr producer = ProducerPCBConstructor(procon);
-	PcbPtr consumer = ConsumerPCBConstructor(procon);
+			terminateIsr();
+			return 1;	//currProcess has been terminated, we don't want to execute the rest of the loop, instead jump to next iteration
+		}
+		sysStackPC = 0;
+	}
+	return 0;
+}
 
-	//set the procon object's producer and consumer PCBs
-	ProConSetProducer(producer, procon);
-	ProConSetConsumer(consumer, procon);
+/*returns 0 if no trap request, 1 if yes*/
+int checkIOTraps() {
+	if (currProcess && checkIORequest(1) != 0) {
+		printf("I/O trap request: I/O device 1, ");
+		IOTrapHandler(device1);
+		return 1;
+	}
 
+	if (currProcess && checkIORequest(2) != 0) {
+		printf("I/O trap request: I/O device 2, ");
+		IOTrapHandler(device2);
+		return 1;
+	}
+	return 0;
+}
+
+
+//returns 0 if no context switch, 1 if context switch
+int checkPCTraps() {
+	ProdConsTrapType trapRequest = checkProdConsRequest();
+	if (trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap) {
+		return ProdConsTrapHandler(trapRequest);
+	}
+}
+
+//returns 0 if no context switch, 1 if context switch
+int checkMRTraps() {
+	if (!notBlockedByLock()) {
+		//TODO make an isr for this
+		scheduler(BLOCKED_BY_LOCK);
+		simCounter++;
+		return 1;
+		//continue;
+	} else {
+		PcbPtr wasWaitingPcb = checkUnlock();
+		if (wasWaitingPcb) {
+			//TODO make an isr for this
+			pqEnqueue(readyProcesses, wasWaitingPcb);
+		}
+		return 0;
+	}
+
+	printIfInCriticalSection();
 }
 
 void cpu() {
 	genProcesses();
+	genProducerConsumerPairs();
+	genSharedResourcePairs();
 
 		printf("\r\nBegin Simulation:\r\n\r\n");
 
-		int simCounter = 0;
+		simCounter = 0;
 
 		while (simCounter <= SIMULATION_END) {
 
-			//check for timer interrupt, if so, call timerISR()
-			if (timerCheck() == 1) {
-				//printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
-//				if (PCBGetState(currProcess) != terminated) {
-				genProcesses();
-				if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
-					printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
-				} else {
-					printf("Timer interrupt: no current process is running, ");
-				}
+/****check for timer interrupt, if so, call timerISR()****/
+			checkTimerInterrupt();
 
-				timerIsr();
-			}
+/****Checking for IO interrupts****/
+			checkIOInterrupts();
 
-/****Checking for IO interrupts*****/
-			//check if there has been an IO interrupt, if so call appropriate ioISR
-			if (checkIOInterrupt(device1) == 1) {
-				if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
-					printf("I/O 1 Completion interrupt: PID %d is running, ", PCBGetID(currProcess));
-				} else {
-					printf("I/O 1 Completion interrupt: no current process is running, ");
-				}
-				//call the IO service routine
-				IO_ISR(1);
-			}
-
-			if (checkIOInterrupt(device2) == 1) {
-				if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
-					printf("I/O 1 Completion interrupt: PID %d is running, ", PCBGetID(currProcess));
-				} else {
-					printf("I/O 1 Completion interrupt: no current process is running.");
-				}
-				//call the IO service routine
-				IO_ISR(2);
-			}
-
-			//check the current process's PC, if it is MAX_PC, set to 0 and increment TERM_COUNT
-			if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/
-					&& sysStackPC >= PCBGetMaxPC(currProcess)) {
-				PCBSetTermCount(currProcess, PCBGetTermCount(currProcess) + 1);
-				printf("\r\n");
-				//if TERM_COUNT = TERMINATE, then call terminateISR to put this process in the terminated list
-				if (PCBGetTermCount(currProcess) == PCBGetTerminate(currProcess)) {
-
-					terminateIsr();
-					continue;	//currProcess has been terminated, we don't want to execute the rest of the loop, instead jump to next iteration
-				}
-				//PCBSetPC(currProcess, 0);
-				sysStackPC = 0;
+/****check the current process's PC, if it is MAX_PC, set to 0 and increment TERM_COUNT*****/
+			if (checkTermCountAndTermination()) {
+				continue;
 			}
 
 			sysStackPC++;
 
-/***Checking traps*****/
-			if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/
-					&& checkIORequest(1) != 0) {
-				printf("I/O trap request: I/O device 1, ");
-				IOTrapHandler(device1);
+/****Checking traps****/
+			if (checkIOTraps()) {
+				continue;
 			}
-
-			if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/
-					&& checkIORequest(2) != 0) {
-				printf("I/O trap request: I/O device 2, ");
-				IOTrapHandler(device2);
+			RelationshipPtr relationship = PCBGetRelationship(currProcess);
+			if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
+				continue;
+			} else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
+				continue;
 			}
-
-
-			//at end
-			simCounter++;
 		}
+
+/****Checking for deadlock****/
+		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+			if (deadlockDetect()) {
+				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+			}
+		}
+
+/****Checking for starvation****/
+		//TODO
+
+		//at end
+		simCounter++;
 }
 
 int main(void) {
 	srand(time(NULL));
 	currPID = 0;
 	sysStackPC = 0;
-	/*io1Count = -1;
-	io2Count = -1;*/
 	timerCount = TIMER_QUANTUM;
 	newProcesses = fifoQueueConstructor();
-	readyProcesses = fifoQueueConstructor();
+	readyProcesses = pqConstructor();
 	terminatedProcesses = fifoQueueConstructor();
 	device1 = DeviceConstructor();
 	device2 = DeviceConstructor();
+	//mutexes = (MutexPtr) malloc(sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2));
 
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
 	//An initial process to start with
-	currProcess = PCBConstructor();
+	currProcess = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+	PCBConstructor(currProcess, none, NULL);
 	if(currProcess != NULL)	// Remember to call the destructor when finished using newProc
 	{
 		PCBSetID(currProcess, currPID);
 		PCBSetPriority(currProcess, rand() % PRIORITY_LEVELS);
 		PCBSetState(currProcess, running);
-		//fifoQueueEnqueue(newProcesses, currProcess);
 		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
-//		printf("Process created: %s\r\n", PCBToString(currProcess));
 		cpu();
 	}
 
 	//free all the things!
 	fifoQueueDestructor(&newProcesses);
-	fifoQueueDestructor(&readyProcesses);
+	pqDestructor(readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
 	DeviceDestructor(device1);
