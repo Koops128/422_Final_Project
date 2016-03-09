@@ -17,7 +17,7 @@
 #ifndef PCB_H_
 #define PCB_H_
 
-//#include "ProdConsObj.h"
+#include "CQ.h"
 
 #define NUM_IO_TRAPS 4
 #define MAX_PC 200
@@ -92,8 +92,9 @@ typedef struct MRData{
 
 typedef struct PCData{
 	int mutex;
-	//condition var 1
-	//condition var 2
+	int condVar1;
+	int condVar2;
+	cQPtr buffer;
 } PCDataStr;
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
@@ -194,9 +195,11 @@ char *PCBToString(PcbPtr pcb);
  */
 void PCBDestructor(PcbPtr pcb);
 
-int ProConWait(PcbPtr waiter);
+//int ProConWait(PcbPtr waiter);
+//
+//PcbPtr ProConSignal(PcbPtr signaler);
 
-PcbPtr ProConSignal(PcbPtr signaler);
+void initializeTrapArray(PcbPtr pcb);
 
 /*********************************************************************************/
 /*                          	 Mutex Related			                         */
