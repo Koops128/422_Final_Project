@@ -22,6 +22,7 @@
 #include "Device.h"
 #include "Mutex.h"
 #include "PriorityQueue.h"
+#include "CondVar.h"
 
 //defines
 #define TIMER_INTERRUPT 1
@@ -139,13 +140,13 @@ void scheduler(int interruptType) {
 	for (i = 0; i < newProcesses->size; i++) {
 		PcbPtr pcb = fifoQueueDequeue(newProcesses);
 		PCBSetState(pcb, ready);
-		fifoQueueEnqueue(readyProcesses, pcb);
+		pqEnqueue(readyProcesses, pcb);
 	}
 
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
 		if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
-			fifoQueueEnqueue(readyProcesses, currProcess);
+			pqEnqueue(readyProcesses, currProcess);
 			PCBSetState(currProcess, ready);
 		}
 		dispatcher();
@@ -239,7 +240,7 @@ void IO_ISR(int numIO) {	//IOCompletionHandler
 			setIOTimer(device2);
 		}
 	}
-	fifoQueueEnqueue(readyProcesses, pcb);
+	pqEnqueue(readyProcesses, pcb);
 	PCBSetState(pcb, ready);
 
 	printf("PID %d put in ready queue\r\n\r\n", PCBGetID(pcb));
@@ -268,7 +269,6 @@ void IOTrapHandler(Device* d) {
 int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 	saveCpuToPcb();
 	PCBSetState(currProcess, blocked);
-	PcbPtr returned;
 	int contextSwitch = 0; //0 for no context switch, 1 for context switch
 
 	switch(trapRequest) {
@@ -287,18 +287,19 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			break;
 		case signalTrap :
 			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
-			returned = ProConSignal(currProcess);
-			if (returned) {
-				fifoQueueEnqueue(readyProcesses, returned);
-			}
+			//returned = ProConSignal(currProcess); //CondVarSignal(CondVarPtr var, PcbPtr pcb)
+//			if (returned) {
+//				pqEnqueue(readyProcesses, returned);
+//			}
 			PCBSetState(currProcess, ready);
 			break;
 		case waitTrap :
 			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
-			if (ProConWait(currProcess)) {
-				scheduler(PRO_CON_INTERRUPT);
-				contextSwitch = 1;
-			}
+
+//			if (ProConWait(currProcess)) { //CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb);
+//				scheduler(PRO_CON_INTERRUPT);
+//				contextSwitch = 1;
+//			}
 			break;
 		default:
 			break;
@@ -503,8 +504,69 @@ void genProcesses() {
 	}
 }
 
-void genSharedResourcePairs() {
-	//TODO
+/*Creates <NUM_MUT_REC_PAIRS> mutual resource user pairs and enqueues in new queue.*/
+void genMutualResourceUsers() {
+//	unsigned int lock1Steps[NUM_MUTEX_STEPS] = {20, 40, 60, 80}; //All the same, for simplicity sake and ease of analysis
+//	unsigned int lock2Steps[NUM_MUTEX_STEPS] = {21, 41, 61, 81};
+//	unsigned int unlock2Steps[NUM_MUTEX_STEPS] = {23, 43, 63, 83};
+//	unsigned int unlock1Steps[NUM_MUTEX_STEPS] = {24, 44, 64, 84}; //All the same, for simplicity sake and ease of analysis
+
+	/* Use of the following makes deadlock more likely because there are more
+	 * instructions where a timer interrupt could occur and the other process
+	 * could get a lock on the other lock.*/
+	unsigned int lock1Steps[NUM_MUTEX_STEPS] = {20, 40, 60, 80}; //All the same, for simplicity sake and ease of analysis
+	unsigned int lock2Steps[NUM_MUTEX_STEPS] = {25, 45, 65, 85};
+	unsigned int unlock2Steps[NUM_MUTEX_STEPS] = {30, 50, 70, 90};
+	unsigned int unlock1Steps[NUM_MUTEX_STEPS] = {35, 55, 75, 95}; //All the same, for simplicity sake and ease of analysis
+
+
+	int i;
+	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
+		int priority = rand() % PRIORITY_LEVELS;
+		PcbPtr Ai = PCBAllocateSpace();
+		PcbPtr Bi = PCBAllocateSpace();
+		PCBConstructor(Ai, mutrecA, Bi);
+		PCBConstructor(Bi, mutrecB, Ai);
+		PCBSetLastQuantum(Ai, currQuantum);
+		PCBSetLastQuantum(Bi, currQuantum);
+		PCBSetID(Ai, ++currPID);
+		PCBSetID(Bi, ++currPID);
+		PCBSetPriority(Ai, priority); //Both at same priority to ensure progress. Not sure if this is a hack.
+		PCBSetPriority(Bi, priority);
+		int mutex1Idx = 2 * i;
+		int mutex2Idx = (2 * i) + 1;
+		mutexes[mutex1Idx] = MutexConstructor(mutex1Idx);
+		mutexes[mutex2Idx] = MutexConstructor(mutex2Idx);
+		PCBSetMutexIndex(Ai, 1, mutex1Idx);
+		PCBSetMutexIndex(Ai, 2, mutex2Idx);
+
+		if (DEADLOCK) {
+			PCBSetMutexIndex(Bi, 1, mutex2Idx); //make mutex 2 be the first it tries to get a lock on
+			PCBSetMutexIndex(Bi, 2, mutex1Idx);
+		} else {
+			PCBSetMutexIndex(Bi, 1, mutex1Idx);
+			PCBSetMutexIndex(Bi, 2, mutex2Idx);
+		}
+
+		PCBSetMutexLockSteps(Ai, 1, lock1Steps);
+		PCBSetMutexLockSteps(Bi, 1, lock1Steps);
+		PCBSetMutexLockSteps(Ai, 2, lock2Steps);
+		PCBSetMutexLockSteps(Bi, 2, lock2Steps);
+		PCBSetMutexUnlockSteps(Ai, 2, unlock2Steps);
+		PCBSetMutexUnlockSteps(Bi, 2, unlock2Steps);
+		PCBSetMutexUnlockSteps(Ai, 1, unlock1Steps);
+		PCBSetMutexUnlockSteps(Bi, 1, unlock1Steps);
+
+		initializeTrapArray(Ai);
+		initializeTrapArray(Bi);
+
+
+		printf("Mutual resource user Process created: PID: %d Priority %d at %lu\n", PCBGetID(Ai), PCBGetPriority(Ai), PCBGetCreation(Ai));
+		printf("Mutual resource user Process created: PID: %d Priority %d at %lu\n", PCBGetID(Bi), PCBGetPriority(Bi), PCBGetCreation(Bi));
+
+		fifoQueueEnqueue(newProcesses, Ai);
+		fifoQueueEnqueue(newProcesses, Bi);
+	}
 }
 
 void genProducerConsumerPairs() {
@@ -602,22 +664,24 @@ int checkIOTraps() {
 	return 0;
 }
 
-
 //returns 0 if no context switch, 1 if context switch
 int checkPCTraps() {
+	int contextSwitch = 0;
 	ProdConsTrapType trapRequest = checkProdConsRequest();
 	if (trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap) {
-		return ProdConsTrapHandler(trapRequest);
+		contextSwitch =  ProdConsTrapHandler(trapRequest);
 	}
+	return contextSwitch;
 }
 
 //returns 0 if no context switch, 1 if context switch
 int checkMRTraps() {
+	int contextSwitch = 0;
 	if (!notBlockedByLock()) {
 		//TODO make an isr for this
 		scheduler(BLOCKED_BY_LOCK);
 		simCounter++;
-		return 1;
+		contextSwitch = 1;
 		//continue;
 	} else {
 		PcbPtr wasWaitingPcb = checkUnlock();
@@ -625,16 +689,16 @@ int checkMRTraps() {
 			//TODO make an isr for this
 			pqEnqueue(readyProcesses, wasWaitingPcb);
 		}
-		return 0;
 	}
 
 	printIfInCriticalSection();
+	return contextSwitch;
 }
 
 void cpu() {
 	genProcesses();
 	genProducerConsumerPairs();
-	genSharedResourcePairs();
+	genMutualResourceUsers();
 
 		printf("\r\nBegin Simulation:\r\n\r\n");
 
@@ -691,7 +755,6 @@ int main(void) {
 	terminatedProcesses = fifoQueueConstructor();
 	device1 = DeviceConstructor();
 	device2 = DeviceConstructor();
-	//mutexes = (MutexPtr) malloc(sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2));
 
 	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
