@@ -29,6 +29,10 @@
 #define MAX_SHARED_SIZE 5
 
 //SHARED RESOURCE DEFINES
+#define SR_LOCK_UNLOCK 			2
+#define NUM_MUTEX_STEPS 		4
+
+//SHARED RESOURCE DEFINES
 #define SR_LOCK_UNLOCK 2
 
 typedef enum {
@@ -59,8 +63,10 @@ typedef struct PCData* PCDataPtr;
 //typedef struct Mutex* MutexPtr;
 
 typedef struct mutRecPairSteps {
-	unsigned int lock[SR_LOCK_UNLOCK];
-	unsigned int unlock[SR_LOCK_UNLOCK];
+	unsigned int lock1[NUM_MUTEX_STEPS];
+	unsigned int unlock1[NUM_MUTEX_STEPS];
+	unsigned int lock2[NUM_MUTEX_STEPS];
+	unsigned int unlock2[NUM_MUTEX_STEPS];
 } MutRecStepsStr;
 
 typedef struct prodConsPairSteps {
@@ -126,6 +132,9 @@ void PCBSetTerminate(PcbPtr pcb, int newTerminate);
 
 void PCBSetTermCount(PcbPtr pcb, unsigned int newTermCount);
 
+void PCBSetStarveBoostFlag(PcbPtr pcb, int flag);
+void PCBSetLastQuantum(PcbPtr pcb, unsigned int quantum);
+
 void PCBProdConsSetMutex(PcbPtr pcb, int mutex);
 
 /**
@@ -168,6 +177,9 @@ MRDataPtr PCBGetMRData(PcbPtr pcb);
 
 PCDataPtr PCBGetPCData(PcbPtr pcb);
 
+int PCBGetStarveBoostFlag(PcbPtr pcb);
+int PCBGetLastQuantum(PcbPtr pcb);
+
 PcbPtr PCBConstructor(PcbPtr thisPcb, RelationshipType theType, PcbPtr partner);
 
 PcbPtr PCBAllocateSpace();
@@ -185,5 +197,15 @@ void PCBDestructor(PcbPtr pcb);
 int ProConWait(PcbPtr waiter);
 
 PcbPtr ProConSignal(PcbPtr signaler);
+
+/*********************************************************************************/
+/*                          	 Mutex Related			                         */
+/*********************************************************************************/
+void PCBSetMutexLockSteps(PcbPtr pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]);
+void PCBSetMutexUnlockSteps(PcbPtr pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]);
+int isMutexLockStep(PcbPtr pcb, int mutexNum, unsigned int theStep);
+int isMutexUnlockStep(PcbPtr pcb, int mutexNum, unsigned int theStep);
+void PCBSetMutexIndex(PcbPtr pcb, int mutexNum, int index);
+int PCBGetMutexIndex(PcbPtr pcb, int mutexNum);
 
 #endif /* PCB_H_ */
