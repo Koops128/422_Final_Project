@@ -298,11 +298,13 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
 			if (ProConWait(currProcess)) {
 				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
 			}
 			break;
 		default:
 			break;
 	}
+	return contextSwitch;
 }
 
 //returns 0 if there's no io request, nonzero if request was made.
@@ -601,26 +603,29 @@ int checkIOTraps() {
 }
 
 
-
-void checkPCTraps() {
+//returns 0 if no context switch, 1 if context switch
+int checkPCTraps() {
 	ProdConsTrapType trapRequest = checkProdConsRequest();
 	if (trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap) {
-		ProdConsTrapHandler(trapRequest);
+		return ProdConsTrapHandler(trapRequest);
 	}
 }
 
-void checkMRTraps() {
+//returns 0 if no context switch, 1 if context switch
+int checkMRTraps() {
 	if (!notBlockedByLock()) {
 		//TODO make an isr for this
 		scheduler(BLOCKED_BY_LOCK);
 		simCounter++;
-		continue;
+		return 1;
+		//continue;
 	} else {
 		PcbPtr wasWaitingPcb = checkUnlock();
 		if (wasWaitingPcb) {
 			//TODO make an isr for this
 			pqEnqueue(readyProcesses, wasWaitingPcb);
 		}
+		return 0;
 	}
 
 	printIfInCriticalSection();
@@ -655,15 +660,19 @@ void cpu() {
 				continue;
 			}
 			RelationshipPtr relationship = PCBGetRelationship(currProcess);
-			if (relationship->mType == producer || relationship->mType == consumer) {
-				checkPCTraps();
-			} else if (relationship->mType == mutrecA || relationship->mType == mutrecB) {
-				checkMRTraps();
+			if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
+				continue;
+			} else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
+				continue;
 			}
 		}
 
 /****Checking for deadlock****/
-		//TODO
+		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+			if (deadlockDetect()) {
+				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+			}
+		}
 
 /****Checking for starvation****/
 		//TODO
