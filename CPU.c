@@ -75,7 +75,7 @@ Device* device2;
 
 /*Prepares the waiting process to be executed.*/
 void dispatcher() {
-	currProcess = pqDequeue(readyProcesses); //fifoQueueDequeue(readyProcesses);
+	currProcess = pqDequeue(readyProcesses);
 	if (currProcess) {
 		PCBSetState(currProcess, running);
 		sysStackPC = PCBGetPC(currProcess);
@@ -95,16 +95,27 @@ void dispatcher() {
 /*=================================================
  *				Starvation Detection
  *=================================================*/
+/*	A process is "starving" if it hasn't run for (numProcessesInQueue)*(priorityLevel)
+ *  quantums. Appropriately, more processes in the system means each process is expected
+ *  to get less time to run. Also, lower priority level means we expect the process not
+ *  to have run for a longer time.
+ *  A "baseline" would be equal running time for each process, so we would expect a process
+ *  not to have run for (numProcessesInQueue) quantums before promoting it. Multiplying by
+ *  the priority level is thus a way to weight this so lower priority processes aren't
+ *  expected to get as much CPU time as higher priority ones.
+ */
 void runStarvationDetector() {
 	//sum up number of processes
-	int i, numProcs;
+	int i, numProcs = 0;
+	printf("\n---Running S Detector---\n");
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
 		numProcs += ((readyProcesses->priorityArray)[i])->size;
+		printf("Queue %d has %d processes\n", i, ((readyProcesses->priorityArray)[i])->size);
 	}
 
-	//go through each priority level (besides top) and see if heads need boosting
-	//and each priority level (except last) and see if heads need to go back to original level.
-	//(going through the entire queues would be a lot of overhead)
+	//Check head of each priority level (besides top) and see if it needs boosting
+	//Check head of each priority level (except last) and see if it needs to go back to original level.
+	//(Only check heads since going through the entire queues would be a lot of overhead)
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
 		FifoQueue* fq = (readyProcesses->priorityArray)[i];
 		if (fq) {
@@ -116,8 +127,8 @@ void runStarvationDetector() {
 					PCBSetPriority(pcb, i + 1);
 					PCBSetStarveBoostFlag(pcb, 0);
 				}
-				//test if should be promoted
-				if (i > 0) {
+				//	Test if should be promoted
+				if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
 					int threshold = numProcs * (i+1);
 					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
 					if (cyclesSinceRan > threshold ) {
@@ -125,13 +136,13 @@ void runStarvationDetector() {
 						PCBSetStarveBoostFlag(pcb, 1);
 						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
 
-						printf("Starvation detected. After not running for %d cycles, PID %d priority went from %d to %d.\n", cyclesSinceRan, PCBGetID(pcb), i, i-1);
+						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue, PID %d priority went from %d to %d.\n", cyclesSinceRan, numProcs, PCBGetID(pcb), i, i-1);
 					}
 				}
 			}
 		}
 	}
-
+	printf("---Exiting S Detector---\n");
 }
 
 
@@ -395,7 +406,7 @@ void checkTimerInterrupt() {
 		currQuantum++;
 		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
 		//TODO comment back in (commented out for simplicity to see how stuff works)
-		//genProcesses();
+		genProcesses();
 		if (currProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
@@ -651,7 +662,9 @@ void cpu() {
 		checkTimerInterrupt();
 		checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
 
-		/*******	Checking for Termination	*******/
+		/******************************************
+		 *		Checking for Termination
+		 ******************************************/
 		/* Before we increment the SysStack, we need to know if the process is at its max PC (so we don't go beyond it). */
 		if(checkTermCountAndTermination()){
 			continue;
@@ -663,9 +676,6 @@ void cpu() {
 		 * we can safely increment the sys stack pc.  **/
 		sysStackPC++;
 
-		/******************************************
-		 *			Checking IO Traps
-		 ******************************************/
 		checkIOTraps();
 
 		//TODO delete this when done debugging.
@@ -694,6 +704,7 @@ void cpu() {
 
 		}
 
+
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
 				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
@@ -712,7 +723,6 @@ int main(void) {
 	timerCount = TIMER_QUANTUM;
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = pqConstructor();
-	//readyProcesses = fifoQueueConstructor();
 	terminatedProcesses = fifoQueueConstructor();
 	device1 = IODeviceConstructor();
 	device2 = IODeviceConstructor();
@@ -734,7 +744,6 @@ int main(void) {
 	//free all the things!
 	fifoQueueDestructor(&newProcesses);
 	pqDestructor(readyProcesses);
-	//fifoQueueDestructor(&readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
 	IODeviceDestructor(device1);
