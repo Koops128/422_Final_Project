@@ -47,6 +47,9 @@ typedef struct PCB {
 	unsigned int term_count;
 	unsigned int IO_1_Traps[NUM_IO_TRAPS];
 	unsigned int IO_2_Traps[NUM_IO_TRAPS];
+
+	int starveBoostFlag; //If 0, not currently boosted
+	int lastQuantumRan; //The index of the time quantum where it last ran (or quantum created if never ran)
 } PcbStr;
 
 //PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon){
@@ -122,6 +125,18 @@ void PCBSetTermCount(PcbStr* pcb, unsigned int newTermCount) {
 	pcb->term_count = newTermCount;
 }
 
+void PCBSetStarveBoostFlag(PcbStr* pcb, int flag) {
+	if (pcb) {
+		pcb->starveBoostFlag = flag;
+	}
+}
+
+void PCBSetLastQuantum(PcbStr* pcb, unsigned int quantum) {
+	if(pcb) {
+		pcb->lastQuantumRan = quantum;
+	}
+}
+
 void PCBProdConsSetMutex(PcbPtr pcb, int mutex) {
 	pcb->PairDataStr.ProConData->mutex = mutex;
 }
@@ -185,6 +200,123 @@ PCDataPtr PCBGetPCData(PcbPtr pcb) {
 	return pcb->PairDataStr.ProConData;
 }
 
+/*Returns 0 if PCB is not boosted, and > 0 if it is boosted. Returns -1 if pcb is null.*/
+int PCBGetStarveBoostFlag(PcbStr* pcb) {
+	if (pcb) {
+		return pcb->starveBoostFlag;
+	} else {
+		return -1;
+	}
+}
+
+int PCBGetLastQuantum(PcbStr* pcb) {
+	if (pcb) {
+		return pcb->lastQuantumRan;
+	} else {
+		return -1;
+	}
+}
+
+/*********************************************************************************/
+/*                          	 Mutex Related			                         */
+/*********************************************************************************/
+
+/*The mutex<mutexNum>Index of this pcb will be set to index.
+ *(Serves as an index into an array of mutexes outside of this file).*/
+void PCBSetMutexIndex(PcbStr* pcb, int mutexNum, int index) {
+	if (mutexNum == 1) {
+		pcb->PairDataStr.MutRecData->mutex1 = index;
+	} else {
+		pcb->PairDataStr.MutRecData->mutex2 = index;
+	}
+}
+
+int PCBGetMutexIndex(PcbStr* pcb, int mutexNum) {
+	if (mutexNum == 1) {
+		return pcb->PairDataStr.MutRecData->mutex1;
+	} else {
+		return pcb->PairDataStr.MutRecData->mutex2;
+	}
+}
+
+
+void PCBSetMutexLockSteps(PcbStr* pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]) {
+	if (pcb) {
+		MRStepsPtr theStepStr = pcb->relationship->StepsStr.mrSteps;
+		int i;
+		unsigned int* theArr = mutexNum == 1? theStepStr->lock1 : theStepStr->lock2;
+		for (i = 0; i < NUM_MUTEX_STEPS; i++) {
+			theArr[i] = theSteps[i];
+		}
+	}
+}
+
+void PCBSetMutexUnlockSteps(PcbStr* pcb, int mutexNum, unsigned int theSteps[NUM_MUTEX_STEPS]) {
+	if (pcb) {
+		MRStepsPtr theStepStr = pcb->relationship->StepsStr.mrSteps;
+		int i;
+		unsigned int* theArr = mutexNum == 1? theStepStr->unlock1 : theStepStr->unlock2;
+		for (i = 0; i < NUM_MUTEX_STEPS; i++) {
+			theArr[i] = theSteps[i];
+		}
+	}
+}
+
+/*
+ *Returns 1 if the given int is a step where this pcb requests a lock on the specified mutex.
+ *mutexNum: which mutex's steps to look at (1 or 2)
+ *theStep: the number to check if it's a step.
+ */
+int isMutexLockStep(PcbStr* pcb, int mutexNum, unsigned int theStep) {
+	int i;
+	int requestMade = 0;
+	if (pcb) {
+		if (mutexNum == 1) { //look through array 1
+			unsigned int* steps = pcb->relationship->StepsStr.mrSteps->lock1;
+			for (i=0; i < NUM_MUTEX_STEPS; i++) {
+				requestMade = steps[i] == theStep ? 1: requestMade;
+			}
+		} else { //look through array 2
+			unsigned int* steps = pcb->relationship->StepsStr.mrSteps->lock2;
+			for (i=0; i < NUM_IO_TRAPS; i++) {
+				requestMade = steps[i] == theStep ? 1: requestMade;
+			}
+		}
+	}
+	return requestMade;
+}
+
+/*mutexNum : 1 or 2
+ *theStep : the number to check whether it's an unlock step
+ */
+int isMutexUnlockStep(PcbStr* pcb, int mutexNum, unsigned int theStep) {
+	int i;
+	int requestMade = 0;
+	if (pcb) {
+		if (mutexNum == 1) { //look through array 1
+			unsigned int* steps = pcb->relationship->StepsStr.mrSteps->unlock1;
+			for (i=0; i < NUM_MUTEX_STEPS; i++) {
+				requestMade = steps[i] == theStep ? 1: requestMade;
+			}
+		} else { //look through array 2
+			unsigned int* steps = pcb->relationship->StepsStr.mrSteps->unlock2;
+			for (i=0; i < NUM_IO_TRAPS; i++) {
+				requestMade = steps[i] == theStep ? 1: requestMade;
+			}
+		}
+	}
+	return requestMade;
+}
+//
+///*Returns true if the PCB is in its step where it prints.*/
+//int isInCriticalSection(PcbStr* pcb) {
+//	if (pcb) {
+//
+//	} else {
+//		return 0;
+//	}
+//}
+
 /*
  * Partitions (maxVal - minVal) into n non-overlapping partitions.
  * Sets storage[i] to a random number from the corresponding partition.
@@ -204,6 +336,63 @@ void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
 	}
 }
 
+/*Creates traps specifically outside of lock/unlock bounds.
+ *Stole Abby's code.*/
+void genMutrecTraps(PcbStr* pcb, unsigned int storage[NUM_IO_TRAPS * 2]) {
+	int minVal = 0;
+	int maxVal = pcb->maxPC;
+	int partitionSize = (maxVal - minVal) / (NUM_IO_TRAPS * 2);
+	int i, j;
+	for(i = 0; i < (NUM_IO_TRAPS * 2); i++) {
+		int randNum;
+		int isOk;
+		do {
+			randNum = (rand() % (partitionSize)) + (i * partitionSize);
+
+			isOk = 1;
+			j = 0;
+			for (j = 0; j < NUM_MUTEX_STEPS; j++) {
+				MRStepsPtr theStepStr = pcb->relationship->StepsStr.mrSteps; //struct that holds all step arrays
+				if ( (randNum >= ((theStepStr)->lock1)[j])  &&	(randNum <= ((theStepStr)->unlock1)[j]) &&
+					 (randNum >= ((theStepStr)->lock2)[j])  &&	(randNum <= ((theStepStr)->unlock2)[j]) ) {
+					isOk = 0;
+				}
+			}
+		} while(!isOk);
+		storage[i] = randNum;
+	}
+}
+
+
+/*If the PCB is a mutual resource user, please call this after initializing the lock and unlock step arrays.*/
+void initializeTrapArray(PcbStr* pcb) {
+	unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
+
+	/****Create the traps in a way specific to the pairType****/
+	switch (pcb->relationship->mType) {
+	case none:
+		genTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC);
+		break;
+	case mutrecA:
+		genMutrecTraps(pcb, allTraps);
+		break;
+	case mutrecB:
+		genMutrecTraps(pcb, allTraps);
+		break;
+	//TODO prodCon case
+	default :
+		break;
+	}
+
+	/**Load up the trap array with results.**/
+	int i;
+	for (i = 0; i < NUM_IO_TRAPS; i++) {
+		pcb->IO_1_Traps[i] = allTraps[i*2];			//grab even indices
+		pcb->IO_2_Traps[i] = allTraps[(i*2) + 1]; 	//grab odd indices
+	}
+	free(allTraps);
+}
+
 void genMRIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
 
 }
@@ -218,6 +407,9 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	for(i = 0; i < numTraps; i++) {
 		int randNum = (rand() % (partitionSize)) + (i * partitionSize);
 		allTraps[i] = randNum;
+//		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
+//			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
+//		}
 
 	}
 
@@ -237,6 +429,10 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	io2[1] = allTraps[6];
 	io2[2] = allTraps[11];
 	io2[3] = allTraps[13];
+		//The wait instruction is somewhere between the first lock/unlock pair
+		//the signal instruction is somewhere between the second lock/unlock pair
+//	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
+//	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
 
 	free(allTraps);
 }
@@ -269,7 +465,13 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 		//genPCIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
 	} else if (theType == mutrecA || theType == mutrecB) {
 		pcb->relationship->mPartner = partner;
-		//TODO set traps for mutual resources
+		//allocate appropriate memory
+		pcb->PairDataStr.MutRecData = malloc(sizeof(MRDataPtr));
+		pcb->relationship->StepsStr.mrSteps = malloc(sizeof(MutRecStepsStr));
+
+		if (theType != mutrecA && theType != mutrecB) {
+			initializeTrapArray(pcb);
+		}
 
 		//genMRIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
 	} else {
@@ -397,5 +599,59 @@ PcbPtr ProConSignal(PcbPtr signaler) {
 	}
 	return toReturn;
 }
+
+//int main(void) {
+//	srand(time(NULL));
+//
+//	PcbPtr Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//	PcbPtr Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//
+//	PCBConstructor(Producer, producer, Consumer);
+//	PCBSetID(Producer, 1);
+//	PCBSetPriority(Producer, rand() % 16);
+//	printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+//
+//	PCBConstructor(Consumer, consumer, Producer);
+//	PCBSetID(Consumer, 2);
+//	PCBSetPriority(Consumer, rand() % 16);
+//	printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+//
+//	int i;
+//	printf("\nProducer steps\n");
+//	PCStepsPtr pcSteps = PCBGetPCSteps(Producer);
+//	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+//		printf("Lock: %d\n", pcSteps->lock[i]);
+//		printf("Wait: %d\n", pcSteps->wait[0]);
+//		printf("Signal: %d\n", pcSteps->signal[0]);
+//		printf("Unlock: %d\n", pcSteps->unlock[i]);
+//	}
+//
+////	printf("\nConsumer steps\n");
+////	pcSteps = PCBGetPCSteps(Consumer);
+////	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+////		printf("Lock: %d\n", pcSteps->lock[i]);
+////		printf("Wait: %d\n", pcSteps->wait[0]);
+////		printf("Signal: %d\n", pcSteps->signal[0]);
+////		printf("Unlock: %d\n", pcSteps->unlock[i]);
+////	}
+//
+//	printf("\nProducer IO 1 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 1: %d\n", PCBGetIO1Trap(Producer, i));
+//	}
+//	printf("\nProducer IO 2 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 2: %d\n", PCBGetIO2Trap(Producer, i));
+//	}
+//
+////	printf("\nConsumer IO 1 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 1: %d\n", PCBGetIO1Trap(Consumer, i));
+////	}
+////	printf("\nConsumer IO 2 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 2: %d\n", PCBGetIO2Trap(Consumer, i));
+////	}
+//}
 
 
