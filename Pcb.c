@@ -23,7 +23,7 @@
 
 const char* stateNames[] = {"Created","Running","Ready","Interrupted","Blocked","Terminated"};
 
-const char* relationshipType[] = {"None", "Producer", "Consumer", "MutrecA", "MutrecB"};
+//const char* relationshipType[] = {"None", "Producer", "Consumer", "MutrecA", "MutrecB"};
 
 typedef struct PCB {
 	int PID;
@@ -122,6 +122,10 @@ void PCBSetTermCount(PcbStr* pcb, unsigned int newTermCount) {
 	pcb->term_count = newTermCount;
 }
 
+void PCBProdConsSetMutex(PcbPtr pcb, int mutex) {
+	pcb->PairDataStr.ProConData->mutex = mutex;
+}
+
 /**
  * Returns PC of this PCB.
  */
@@ -177,7 +181,7 @@ MRDataPtr PCBGetMRData(PcbPtr pcb) {
 	return pcb->PairDataStr.MutRecData;
 }
 
-PCDataPtr PCBGetPRData(PcbPtr pcb) {
+PCDataPtr PCBGetPCData(PcbPtr pcb) {
 	return pcb->PairDataStr.ProConData;
 }
 
@@ -200,32 +204,6 @@ void genTraps(int n, unsigned int* storage, int minVal, int maxVal) {
 	}
 }
 
-//void genPCIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
-//	int partitionSize = (maxVal - minVal) / n;	// truncate if the division results in a double
-//	int i;
-//	for(i = 0; i < n; i++) {
-//		int randNum;
-//		int isOk;
-//		do {
-//			randNum = (rand() % (partitionSize)) + (i * partitionSize);
-//
-//
-//			printf("\nlock %d randNum %d unlock %d\n", pcb->relationship->StepsStr.pcSteps->lock[i],
-//					randNum, pcb->relationship->StepsStr.pcSteps->unlock[i]);
-//
-//			isOk = 1;
-//			int i = 0;
-//			for (i = 0; i < PC_LOCK_UNLOCK; i++) {
-//				if (randNum >= pcb->relationship->StepsStr.pcSteps->lock[i] &&
-//						randNum <= pcb->relationship->StepsStr.pcSteps->unlock[i]) {
-//					isOk = 0;
-//				}
-//			}
-//		} while(!isOk);
-//		storage[i] = randNum;
-//	}
-//}
-
 void genMRIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
 
 }
@@ -240,9 +218,6 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	for(i = 0; i < numTraps; i++) {
 		int randNum = (rand() % (partitionSize)) + (i * partitionSize);
 		allTraps[i] = randNum;
-//		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-//			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-//		}
 
 	}
 
@@ -262,10 +237,6 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	io2[1] = allTraps[6];
 	io2[2] = allTraps[11];
 	io2[3] = allTraps[13];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-//	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-//	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
 
 	free(allTraps);
 }
@@ -293,6 +264,7 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 		setPCTraps(pcb->relationship->StepsStr.pcSteps->lock, pcb->relationship->StepsStr.pcSteps->unlock,
 				pcb->relationship->StepsStr.pcSteps->wait, pcb->relationship->StepsStr.pcSteps->signal,
 				pcb->IO_1_Traps, pcb->IO_2_Traps);
+
 
 		//genPCIOTraps(NUM_IO_TRAPS * 2, allTraps, 0, pcb->maxPC, pcb);
 	} else if (theType == mutrecA || theType == mutrecB) {
@@ -425,3 +397,5 @@ PcbPtr ProConSignal(PcbPtr signaler) {
 	}
 	return toReturn;
 }
+
+
