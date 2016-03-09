@@ -70,7 +70,7 @@ void CondVarDestructor(CondVarPtr* condVarPtrPtr)
 
 void CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb)
 {
-	printWait(pcb->id, var->id, mutex->id);
+	printWait(PCBGetID(pcb), var->id, mutex->id);
 	MutexUnlock(mutex, pcb);
 	var->pcb = pcb;							// ???????????????????????? block PCB?
 	var->mutex = mutex;
@@ -78,7 +78,7 @@ void CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb)
 
 void CondVarSignal(CondVarPtr var, PcbPtr signaller)
 {
-	printSignal(signaller->id, var->id);
+	printSignal(PCBGetID(signaller), var->id);
 	MutexLock(var->mutex, var->pcb);		// ??????????????????????? unblock PCB?
 	var->pcb = NULL;
 	var->mutex = NULL;
