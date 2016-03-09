@@ -25,7 +25,8 @@
 #define ROUNDS_TO_PRINT 4 		// the number of rounds to wait before printing simulation data
 #define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
 
-#define DEADLOCK	0//1	//Whether to do deadlock. 0 - no. 1 - yes.
+#define DEADLOCK	1			//Whether to do deadlock. 0 - no. 1 - yes.
+#define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
 /*==========================================
  * 			Global Variables
@@ -469,6 +470,64 @@ void checkIOTraps() {
 }
 
 /*=================================================
+ *				Deadlock Check
+ *=================================================*/
+
+/**
+ * Checks if the pcb is locked by another pcb
+ * and returns the Mutex owner pcb if it is, null otherwise
+ */
+PcbPtr isLocked(PcbPtr owner) {
+	int i, j;
+	for (i = 0; i < NUM_MUTEXES; i++) {
+		MutexPtr m = mutexes[i];
+		if (m->owner != NULL && MutexHasWaiting(m)) {
+			for (j = 0; j < m->waitQ->size; j++) {
+				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
+					return m->owner;
+				}
+			}
+		}
+	}
+	return NULL;
+}
+
+/*
+ * Checks the chain of pcbs being locked by this pcb
+ *
+ * PcbPtr owner the pcb being checked
+ * Returns 1 if pcb is deadlocked, 0 otherwise
+ */
+int checkLock(PcbPtr owner) {
+	PcbPtr parent = isLocked(owner);
+	while (parent != NULL) {//check what its locked by repeatedly
+		if (owner == parent) { //locked by lock itself is locking
+			return 1;
+		}
+		parent = isLocked(parent);//else check what that pcb is locked by
+	}
+	return 0; //pcb is not locked, chain is done
+}
+
+/**
+ * Returns 1 if true 0 otherwise
+ */
+int deadlockDetect() {
+	int i, r;
+	for (i = 0; i < NUM_MUTEXES; i++) {
+		if (mutexes[i]->owner != NULL) {
+			r = checkLock(mutexes[i]->owner);
+			if (r == 1) {
+				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
+				return 1;
+			}
+		}
+	}
+	printf("\r\nno deadlock detected");
+	return 0;
+}
+
+/*=================================================
  *			Mutex Lock/Unlock Check
  *=================================================*/
 
@@ -577,6 +636,12 @@ void cpu() {
 
 			printIfInCriticalSection();
 
+		}
+
+		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+			if (deadlockDetect()) {
+				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+			}
 		}
 
 		//at end
