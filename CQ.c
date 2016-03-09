@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include "CQ.h"
 
 struct circQ {
 	int bufavail;
@@ -16,8 +17,6 @@ struct circQ {
 	/*A pointer to a sequence length "max" of ints.*/
 	int* buffer; //will do pcb though
 };
-
-typedef struct circQ* cQPtr;
 
 cQPtr makeCQ(int size) {
 	cQPtr q = malloc(sizeof(cQPtr));
