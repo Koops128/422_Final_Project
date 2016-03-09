@@ -60,14 +60,14 @@ void printFailUnlockNoOwner(int pidReleaser, int mutexId)
 /*                           CONSTRUCTOR, DESTRUCTOR                             */
 /*********************************************************************************/
 
-MutexPtr MutexConstructor(int id) 
+MutexPtr MutexConstructor(int id)
 {
 	MutexPtr mutex = (MutexPtr) malloc(sizeof(MutexStr));
 	if(mutex == NULL)
 	{
 		return NULL;
 	}
-	
+
 	mutex->id = id;
 	mutex->owner = NULL;
 	mutex->waitQ = fifoQueueConstructor();
@@ -75,7 +75,7 @@ MutexPtr MutexConstructor(int id)
 	return mutex;
 }
 
-void MutexDestructor(MutexPtr* mutexPtrPtr) 
+void MutexDestructor(MutexPtr* mutexPtrPtr)
 {
 	fifoQueueDestructor(&((*mutexPtrPtr)->waitQ));
 	PCBDestructor((*mutexPtrPtr)->owner);
@@ -88,7 +88,7 @@ void MutexDestructor(MutexPtr* mutexPtrPtr)
 /*                               MUTEX FUNCTIONALITY                             */
 /*********************************************************************************/
 
-int MutexLock(MutexPtr mutex, PcbPtr pcb) 
+int MutexLock(MutexPtr mutex, PcbPtr pcb)
 {
 	if(!hasOwner(mutex))
 	{
@@ -104,12 +104,12 @@ int MutexLock(MutexPtr mutex, PcbPtr pcb)
 	}
 }
 
-void MutexUnlock(MutexPtr mutex, PcbPtr pcb) 
+void MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 {
 	if(hasOwner(mutex) && mutex->owner == pcb)
 	{
 		printSuccessUnlock(PCBGetID(pcb), mutex->id, PCBGetID(fifoQueuePeek(mutex->waitQ)));
-		
+
 		if(MutexHasWaiting(mutex))
 		{
 			mutex->owner = fifoQueueDequeue(mutex->waitQ);
