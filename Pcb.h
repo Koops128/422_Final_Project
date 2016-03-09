@@ -82,12 +82,19 @@ char *PCBToString(PcbPtr pcb);
 /*Returns a string value for the given state.*/
 char* StateToString(State state);
 
+/*********************************************************************************/
+/*                          	Getters/Setters			                         */
+/*********************************************************************************/
 
+void PCBSetStarveBoostFlag(PcbPtr pcb, int flag);
+void PCBSetLastQuantum(PcbPtr pcb, unsigned int quantum);
 void PCBSetPriority(PcbPtr pcb, int priority);
 void PCBSetID(PcbPtr pcb, int id);
 void PCBSetState(PcbPtr pcb, State newState);
 void PCBSetPC(PcbPtr pcb, unsigned int newPC);
 
+int PCBGetStarveBoostFlag(PcbPtr pcb);
+int PCBGetLastQuantum(PcbPtr pcb);
 unsigned int PCBGetPC(PcbPtr pcb);
 int PCBGetPriority(PcbPtr pcb);
 int PCBGetID(PcbPtr pcb);

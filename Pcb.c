@@ -36,6 +36,9 @@ typedef struct PCB {
 	unsigned int IO_1_Traps[NUM_IO_TRAPS];
 	unsigned int IO_2_Traps[NUM_IO_TRAPS];
 
+	int starveBoostFlag; //If 0, not currently boosted
+	int lastQuantumRan; //The index of the time quantum where it last ran (or quantum created if never ran)
+
 	RelationshipStr mRelation; //Contains step numbers data
 
 	union { //Contains mutex and/or condition variable data
@@ -148,6 +151,8 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner) {
 	pcb->maxPC = 2000;
 	pcb->terminate = rand()%10;	//ranges from 0-10
 	pcb->term_count = 0;
+	pcb->starveBoostFlag = 0;
+
 
 	//relationship
 	pcb->mRelation.mType = theType;
@@ -314,6 +319,18 @@ char* StateToString(State state) {
 /*                          		Setters			              		         */
 /*********************************************************************************/
 
+void PCBSetStarveBoostFlag(PcbStr* pcb, int flag) {
+	if (pcb) {
+		pcb->starveBoostFlag = flag;
+	}
+}
+
+void PCBSetLastQuantum(PcbStr* pcb, unsigned int quantum) {
+	if(pcb) {
+		pcb->lastQuantumRan = quantum;
+	}
+}
+
 
 void PCBSetPriority(PcbStr* pcb, int priority) {
 	pcb->priority = priority;
@@ -351,6 +368,22 @@ void PCBSetTermCount(PcbStr* pcb, unsigned int newTermCount) {
 /*                          		Getters			              		         */
 /*********************************************************************************/
 
+/*Returns 0 if PCB is not boosted, and > 0 if it is boosted. Returns -1 if pcb is null.*/
+int PCBGetStarveBoostFlag(PcbStr* pcb) {
+	if (pcb) {
+		return pcb->starveBoostFlag;
+	} else {
+		return -1;
+	}
+}
+
+int PCBGetLastQuantum(PcbStr* pcb) {
+	if (pcb) {
+		return pcb->lastQuantumRan;
+	} else {
+		return -1;
+	}
+}
 
 /**
  * Returns PC of this PCB.

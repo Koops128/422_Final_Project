@@ -152,6 +152,12 @@ int fifoQueueSize() {
 	return sizeof(FifoQueue);
 }
 
+//TODO delete or do
+///*Filters out all PCBs for which the given function is true, and returns the result.*/
+//void fifoFilter() {
+//
+//}
+
 char * fifoQueueToString(FifoQueue * queue) {
 	char * string = malloc(sizeof(char) * (queue->size * 4 + 500));
 	string[0]='\0';

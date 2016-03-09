@@ -25,7 +25,7 @@
 #define ROUNDS_TO_PRINT 4 		// the number of rounds to wait before printing simulation data
 #define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
 
-#define DEADLOCK	1			//Whether to do deadlock. 0 - no. 1 - yes.
+#define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
 /*==========================================
@@ -33,9 +33,10 @@
  *==========================================*/
 
 
-int currPID; /*The number of processes created so far. The latest process has this as its ID.*/
+int currPID; 				/*The number of processes created so far. The latest process has this as its ID.*/
 int timerCount;
 unsigned int sysStackPC;
+unsigned int currQuantum;
 PcbPtr currProcess;
 
 MutexPtr mutexes[NUM_MUTEXES];
@@ -78,12 +79,59 @@ void dispatcher() {
 	if (currProcess) {
 		PCBSetState(currProcess, running);
 		sysStackPC = PCBGetPC(currProcess);
-
+		PCBSetLastQuantum(currProcess, currQuantum);
+		if (PCBGetStarveBoostFlag(currProcess)) {
+			PCBSetStarveBoostFlag(currProcess, 0);
+			PCBSetPriority(currProcess, PCBGetPriority(currProcess) + 1);
+		}
 		printf("PID %d was dispatched\n\n", PCBGetID(currProcess));
 	} else {
 		//currProcess = NULL;
 		printf("Ready queue is empty, no process dispatched\n\n");
 	}
+}
+
+
+/*=================================================
+ *				Starvation Detection
+ *=================================================*/
+void runStarvationDetector() {
+	//sum up number of processes
+	int i, numProcs;
+	for (i = 0; i < PRIORITY_LEVELS; i++) {
+		numProcs += ((readyProcesses->priorityArray)[i])->size;
+	}
+
+	//go through each priority level (besides top) and see if heads need boosting
+	//and each priority level (except last) and see if heads need to go back to original level.
+	//(going through the entire queues would be a lot of overhead)
+	for (i = 0; i < PRIORITY_LEVELS; i++) {
+		FifoQueue* fq = (readyProcesses->priorityArray)[i];
+		if (fq) {
+			PcbPtr pcb = fifoQueuePeek(fq);
+			if (pcb) {
+				//test if should be demoted
+				if (i < (PRIORITY_LEVELS -1) && PCBGetStarveBoostFlag(pcb)) {
+					//toggle flag and demote to lower level.
+					PCBSetPriority(pcb, i + 1);
+					PCBSetStarveBoostFlag(pcb, 0);
+				}
+				//test if should be promoted
+				if (i > 0) {
+					int threshold = numProcs * (i+1);
+					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
+					if (cyclesSinceRan > threshold ) {
+						PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
+						PCBSetStarveBoostFlag(pcb, 1);
+						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
+
+						printf("Starvation detected. After not running for %d cycles, PID %d priority went from %d to %d.\n", cyclesSinceRan, PCBGetID(pcb), i, i-1);
+					}
+				}
+			}
+		}
+	}
+
 }
 
 
@@ -96,6 +144,7 @@ void scheduler(int interruptType) {
 		pqEnqueue(readyProcesses, pcb);
 		//fifoQueueEnqueue(readyProcesses, pcb);
 	}
+	runStarvationDetector();
 
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
@@ -139,6 +188,8 @@ void scheduler(int interruptType) {
 	}
 }
 
+
+
 /*=================================================
  *				Process Generation
  *=================================================*/
@@ -157,9 +208,11 @@ void genProcesses() {
 			PCBSetID(newProc, currPID);
 			PCBSetPriority(newProc, rand() % PRIORITY_LEVELS);
 			PCBSetState(newProc, created);
+			PCBSetLastQuantum(newProc, currQuantum);
 			fifoQueueEnqueue(newProcesses, newProc);
 
-			printf("Process created: PID: %d at %lu\n", PCBGetID(newProc), PCBGetCreation(newProc));
+//			printf("Process created: PID: %d at %lu\n", PCBGetID(newProc), PCBGetCreation(newProc));
+			printf("Process created: PID: %d, Priority %d at %lu\n", PCBGetID(newProc), PCBGetPriority(newProc), PCBGetCreation(newProc));
 		}
 	}
 }
@@ -182,14 +235,17 @@ void genMutualResourceUsers() {
 
 	int i;
 	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
+		int priority = rand() % PRIORITY_LEVELS;
 		PcbPtr Ai = PCBAllocateSpace();
 		PcbPtr Bi = PCBAllocateSpace();
 		PCBConstructor(Ai, mutrecA, Bi);
 		PCBConstructor(Bi, mutrecB, Ai);
-//		PcbPtr Ai = PCBConstructor(MUTREC);
-//		PcbPtr Bi = PCBConstructor(MUTREC);
+		PCBSetLastQuantum(Ai, currQuantum);
+		PCBSetLastQuantum(Bi, currQuantum);
 		PCBSetID(Ai, ++currPID);
 		PCBSetID(Bi, ++currPID);
+		PCBSetPriority(Ai, priority); //Both at same priority to ensure progress. Not sure if this is a hack.
+		PCBSetPriority(Bi, priority);
 		int mutex1Idx = 2 * i;
 		int mutex2Idx = (2 * i) + 1;
 		mutexes[mutex1Idx] = MutexConstructor(mutex1Idx);
@@ -214,15 +270,12 @@ void genMutualResourceUsers() {
 		PCBSetMutexUnlockSteps(Ai, 1, unlock1Steps);
 		PCBSetMutexUnlockSteps(Bi, 1, unlock1Steps);
 
-		PCBSetPriority(Ai, 0);
-		PCBSetPriority(Bi, 0);
-
 		initializeTrapArray(Ai);
 		initializeTrapArray(Bi);
 
 
-		printf("Mutual resource user Process created: PID: %d at %lu\n", PCBGetID(Ai), PCBGetCreation(Ai));
-		printf("Mutual resource user Process created: PID: %d at %lu\n", PCBGetID(Bi), PCBGetCreation(Bi));
+		printf("Mutual resource user Process created: PID: %d Priority %d at %lu\n", PCBGetID(Ai), PCBGetPriority(Ai), PCBGetCreation(Ai));
+		printf("Mutual resource user Process created: PID: %d Priority %d at %lu\n", PCBGetID(Bi), PCBGetPriority(Bi), PCBGetCreation(Bi));
 
 		fifoQueueEnqueue(newProcesses, Ai);
 		fifoQueueEnqueue(newProcesses, Bi);
@@ -336,9 +389,12 @@ int timerCheck() {
 	}
 }
 
+/*Checks timer, calling timerIsr if necessary and incrementing currQuantum counter.*/
 void checkTimerInterrupt() {
 	if (timerCheck() == 1) {
-		printf("\r\n===================New Quantum=====================\r\n");
+		currQuantum++;
+		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
+		//TODO comment back in (commented out for simplicity to see how stuff works)
 		//genProcesses();
 		if (currProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
@@ -523,7 +579,7 @@ int deadlockDetect() {
 			}
 		}
 	}
-	printf("\r\nno deadlock detected");
+	printf("\r\nno deadlock detected\r\n");
 	return 0;
 }
 
@@ -661,6 +717,7 @@ int main(void) {
 	device1 = IODeviceConstructor();
 	device2 = IODeviceConstructor();
 
+	currQuantum = 0;
 
 	//An initial process to start with
 	currProcess = PCBConstructor(PCBAllocateSpace(), none, NULL);
@@ -669,6 +726,7 @@ int main(void) {
 		PCBSetID(currProcess, currPID);
 		PCBSetPriority(currProcess, rand() % PRIORITY_LEVELS);
 		PCBSetState(currProcess, running);
+		PCBSetLastQuantum(currProcess, currQuantum);
 		printf("Process created: PID: %d at %lu\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
 		cpu();
 	}
