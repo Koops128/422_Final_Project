@@ -363,7 +363,6 @@ void genMutrecTraps(PcbStr* pcb, unsigned int storage[NUM_IO_TRAPS * 2]) {
 	}
 }
 
-
 /*If the PCB is a mutual resource user, please call this after initializing the lock and unlock step arrays.*/
 void initializeTrapArray(PcbStr* pcb) {
 	unsigned int* allTraps = malloc(sizeof(unsigned int) * NUM_IO_TRAPS * 2);
@@ -391,10 +390,6 @@ void initializeTrapArray(PcbStr* pcb) {
 		pcb->IO_2_Traps[i] = allTraps[(i*2) + 1]; 	//grab odd indices
 	}
 	free(allTraps);
-}
-
-void genMRIOTraps(int n, unsigned int* storage, int minVal, int maxVal, PcbPtr pcb) {
-
 }
 
 /*Helper method to generate the step instructions for producer/consumer PCBs*/
@@ -554,51 +549,54 @@ void PCBDestructor(PcbPtr pcb) {
 	pcb = NULL;	//Only locally sets the pointer to null
 }
 
-/* this is different than waiting for a mutex.
- * This should unlock the mutex it’s holding… it should be holding one since a wait should only be inside a critical section,
- * then return an int (1 or 0) saying whether this PCB needs to wait or not.
- * If it returns a “yes” - 1, then the CPU should take it out of the running state, and put into blocked...
- * but NOT put back into ready queue.  This PCB will get put back into ready queue when whatever signal
- * it’s waiting on is set by the other PCB in this pair.*/
+//TODO Produce and Consume methods
+//These will call the CQ
 
-int ProConWait(PcbPtr waiter) {
-	if(waiter->relationship->mType == producer /*&& shared resource is full*/
-			|| waiter->relationship->mType == consumer /*&& shared resource is empty*/) {
-		//put this process in the waiting queue of the condition variable
-		//unlock the mutex it's holding
-		return 1;//is waiting
-	}
-	return 0;//is not waiting
-}
-
-/* The way this will work, is this is doing the “producing” and “consuming” work while at the same time signaling.
- * It will check if the passed in PCB is the producer, if so, then it will first check
- * if bufavail is at it’s max AND if the WAITING variable is true.
- * If so, then we know that the consumer is waiting, so we want to return the consumer process.
- * So we set the return PcbPtr to consumer.  Then we decrement bufavail to do the “producing” work.
- * In the opposite situation, if the passed in PCB is the consumer, and if bufavail is at 0 AND the WAITING is true,
- * then we know the producer is waiting, so set the return PcbPtr to the producer.  Then increment the bufavail
- * to do the “consuming” work. And then the CPU should know what to do with what is given back.
- * If what is returned is a null pointer, then do nothing.
- * Otherwise, we know we need to put whatever was returned back into the ready queue, because it’s no longer waiting.*/
-
-PcbPtr ProConSignal(PcbPtr signaler) {
-	PcbPtr toReturn = NULL;
-	if (0/*(shared variable is currently empty
-	 	 	|| shared variable is currently full) && partner is waiting*/) {
-		toReturn = signaler->relationship->mPartner;
-		//take the partner out of the condition variable's waiting queue?
-
-	}
-	if (signaler->relationship->mType == producer) {
-		//Put something in the shared resource
-		//decrease availability of shared resource
-	} else {
-		//Take something out of the shared resource
-		//increase availability of shared resource
-	}
-	return toReturn;
-}
+///* this is different than waiting for a mutex.
+// * This should unlock the mutex it’s holding… it should be holding one since a wait should only be inside a critical section,
+// * then return an int (1 or 0) saying whether this PCB needs to wait or not.
+// * If it returns a “yes” - 1, then the CPU should take it out of the running state, and put into blocked...
+// * but NOT put back into ready queue.  This PCB will get put back into ready queue when whatever signal
+// * it’s waiting on is set by the other PCB in this pair.*/
+//
+//int ProConWait(PcbPtr waiter) {
+//	if(waiter->relationship->mType == producer /*&& shared resource is full*/
+//			|| waiter->relationship->mType == consumer /*&& shared resource is empty*/) {
+//		//put this process in the waiting queue of the condition variable
+//		//unlock the mutex it's holding
+//		return 1;//is waiting
+//	}
+//	return 0;//is not waiting
+//}
+//
+///* The way this will work, is this is doing the “producing” and “consuming” work while at the same time signaling.
+// * It will check if the passed in PCB is the producer, if so, then it will first check
+// * if bufavail is at it’s max AND if the WAITING variable is true.
+// * If so, then we know that the consumer is waiting, so we want to return the consumer process.
+// * So we set the return PcbPtr to consumer.  Then we decrement bufavail to do the “producing” work.
+// * In the opposite situation, if the passed in PCB is the consumer, and if bufavail is at 0 AND the WAITING is true,
+// * then we know the producer is waiting, so set the return PcbPtr to the producer.  Then increment the bufavail
+// * to do the “consuming” work. And then the CPU should know what to do with what is given back.
+// * If what is returned is a null pointer, then do nothing.
+// * Otherwise, we know we need to put whatever was returned back into the ready queue, because it’s no longer waiting.*/
+//
+//PcbPtr ProConSignal(PcbPtr signaler) {
+//	PcbPtr toReturn = NULL;
+//	if (0/*(shared variable is currently empty
+//	 	 	|| shared variable is currently full) && partner is waiting*/) {
+//		toReturn = signaler->relationship->mPartner;
+//		//take the partner out of the condition variable's waiting queue?
+//
+//	}
+//	if (signaler->relationship->mType == producer) {
+//		//Put something in the shared resource
+//		//decrease availability of shared resource
+//	} else {
+//		//Take something out of the shared resource
+//		//increase availability of shared resource
+//	}
+//	return toReturn;
+//}
 
 //int main(void) {
 //	srand(time(NULL));
