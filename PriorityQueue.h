@@ -38,4 +38,3 @@ bool pqIsEmpty(PQPtr this);
 char* pqToString(PQPtr this);
 
 #endif
-

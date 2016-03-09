@@ -34,6 +34,7 @@ PQPtr pqConstructor()
 	return pq;
 }
 
+//TODO accept double pointer
 void pqDestructor(PQPtr this)
 {
 	int i;
@@ -41,7 +42,7 @@ void pqDestructor(PQPtr this)
 	{
 		if(this->priorityArray[i] != NULL)
 		{
-			fifoQueueDestructor(this->priorityArray[i]);
+			fifoQueueDestructor(&((this->priorityArray)[i]));
 		}
 	}
 	free(this);
@@ -110,9 +111,9 @@ bool pqIsEmpty(PQPtr this)
 char* pqToString(PQPtr this)
 {
 	char* result = (char*) calloc(1000, sizeof(char));
-	int bufferSize = 0;
+	//int bufferSize = 0;
 
-	int qLabelLength = 10;
+	//int qLabelLength = 10;
 	char * qLabel = (char*) calloc (10, sizeof(char));
 
 	int i;
@@ -128,7 +129,7 @@ char* pqToString(PQPtr this)
 		{
 			char* fifoString = fifoQueueToString(this->priorityArray[i]);
 			int fifoLength = strlen(fifoString);
-			int length = qLabelLength + fifoLength + 1; // +1 for \n at the end
+			//int length = qLabelLength + fifoLength + 1; // +1 for \n at the end
 
 			strncat(result, fifoString, fifoLength);
 		}
