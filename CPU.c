@@ -160,7 +160,7 @@ void scheduler(int interruptType) {
 
 		dispatcher();
 		break;
-	case IO_REQUEST :
+	case IO_COMPLETION :
 		//set currProccess back to running
 		if (currProcess) {
 			PCBSetState(currProcess, running);
@@ -168,7 +168,7 @@ void scheduler(int interruptType) {
 			dispatcher();
 		}
 		break;
-	case IO_COMPLETION :
+	case IO_REQUEST :
 		if (currProcess) {
 			dispatcher();
 		}
@@ -248,7 +248,7 @@ void IO_ISR(int numIO) {	//IOCompletionHandler
 	//PCBSetState(currProcess, ready);
 	//set new io waiting queue process to running
 	//currProcess = pcb;
-	scheduler(IO_REQUEST);
+	scheduler(IO_COMPLETION);
 }
 
 /**Makes a new request to device*/
@@ -262,7 +262,7 @@ void IOTrapHandler(Device* d) {
 	if (d->waitQ->size == 1) {
 		setIOTimer(d);
 	}
-	scheduler(IO_COMPLETION);
+	scheduler(IO_REQUEST);
 }
 
 /*returns 0 if no context switch, 1 if context switch*/
