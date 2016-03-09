@@ -25,7 +25,7 @@
 /*                                 MUTEX STRUCT                                  */
 /*********************************************************************************/
 
-typedef struct Mutex 
+typedef struct Mutex
 {
 	int id;
 	PcbPtr owner;
