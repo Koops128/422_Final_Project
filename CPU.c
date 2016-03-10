@@ -34,7 +34,6 @@
 #define NEW_PROCS		6
 #define PC_PROCS	1
 #define MR_PROCS	1
-#define PRIORITY_LEVELS 16
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
