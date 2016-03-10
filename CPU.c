@@ -6,6 +6,7 @@
 #include "PriorityQueue.h"
 #include "Mutex.h"
 
+
 //typedef enum interruptType {
 //	TIMER, TERMINATE, IO_REQUEST, IO_COMPLETION, LOCK_BLOCK, LOCK_UNBLOCK
 //} interruptType;
@@ -17,21 +18,22 @@
 #define BLOCKED_BY_LOCK 	5
 #define LOCK_UNBLOCK 		6
 
-#define NUM_MUT_REC_PAIRS 1//5
+#define NUM_MUT_REC_PAIRS 1//5			//The number of pairs of processes with two mutexes blocking critical section
 #define NUM_MUTEXES		  NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 
-#define NEW_PROCS		6		// max num new processes to make per quantum
-#define TIMER_QUANTUM 	10//500
-#define ROUNDS_TO_PRINT 4 		// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
+#define NEW_PROCS		6				// max num new processes to make per quantum
+#define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
+#define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
+#define SIMULATION_END 	10000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
+
+
 /*==========================================
  * 			Global Variables
  *==========================================*/
-
 
 int currPID; 				/*The number of processes created so far. The latest process has this as its ID.*/
 int timerCount;
@@ -44,8 +46,8 @@ MutexPtr mutexes[NUM_MUTEXES];
 /**		Queues		**/
 FifoQueue* newProcesses;
 PQPtr readyProcesses;
-//FifoQueue* readyProcesses;
 FifoQueue* terminatedProcesses;
+
 
 
 /*=================================================
@@ -86,31 +88,34 @@ void dispatcher() {
 		}
 		printf("PID %d was dispatched\n\n", PCBGetID(currProcess));
 	} else {
-		//currProcess = NULL;
 		printf("Ready queue is empty, no process dispatched\n\n");
 	}
 }
 
-
+//TODO look at starvation test print statements before submitting
 /*=================================================
  *				Starvation Detection
  *=================================================*/
-/*	A process is "starving" if it hasn't run for (numProcessesInQueue)*(priorityLevel)
- *  quantums. Appropriately, more processes in the system means each process is expected
- *  to get less time to run. Also, lower priority level means we expect the process not
- *  to have run for a longer time.
- *  A "baseline" would be equal running time for each process, so we would expect a process
- *  not to have run for (numProcessesInQueue) quantums before promoting it. Multiplying by
- *  the priority level is thus a way to weight this so lower priority processes aren't
- *  expected to get as much CPU time as higher priority ones.
+/*	A process is "starving" if it hasn't run for (100)*(priorityLevel) quantums.
+ *  Lower priority level means we expect the process not to have run for a longer time,
+ *  so multiplying by priorityLevel is a way to weight this. I wanted to include
+ *  the number of processes in the queue as a contributing factor, but I realized this
+ *  1) entirely prevents old lower priority processes that have never run from being promoted
+ *  if we keep getting new high priority ones and 2) number of processes is implicitly
+ *  a penalty on promotion since the process must be enqueued at the tail of the queue above it,
+ *  and the longer that queue is, the more time it has to wait. Hence, a constant definition
+ *  of starvation does not cause low priority processes to unfairly steal CPU time from higher
+ *  ones.
  */
 void runStarvationDetector() {
 	//sum up number of processes
 	int i, numProcs = 0;
 	printf("\n---Running S Detector---\n");
+	numProcs = currPID;
+	int procsPerLevel[PRIORITY_LEVELS];
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
-		numProcs += ((readyProcesses->priorityArray)[i])->size;
-		printf("Queue %d has %d processes\n", i, ((readyProcesses->priorityArray)[i])->size);
+		procsPerLevel[i] = ((readyProcesses->priorityArray)[i])->size;
+		printf("Queue %d has %d processes, head ran %d quanta ago\n", i, procsPerLevel[i], currQuantum - PCBGetLastQuantum((fifoQueuePeek((readyProcesses->priorityArray)[i]))));
 	}
 
 	//Check head of each priority level (besides top) and see if it needs boosting
@@ -118,6 +123,7 @@ void runStarvationDetector() {
 	//(Only check heads since going through the entire queues would be a lot of overhead)
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
 		FifoQueue* fq = (readyProcesses->priorityArray)[i];
+
 		if (fq) {
 			PcbPtr pcb = fifoQueuePeek(fq);
 			if (pcb) {
@@ -126,17 +132,18 @@ void runStarvationDetector() {
 					//toggle flag and demote to lower level.
 					PCBSetPriority(pcb, i + 1);
 					PCBSetStarveBoostFlag(pcb, 0);
-				}
-				//	Test if should be promoted
-				if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
-					int threshold = numProcs * (i+1);
+					pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
+				}				//	Test if should be promoted
+				else if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
+					int threshold = 100*i;
 					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
 					if (cyclesSinceRan > threshold ) {
 						PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
 						PCBSetStarveBoostFlag(pcb, 1);
 						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
 
-						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue, PID %d priority went from %d to %d.\n", cyclesSinceRan, numProcs, PCBGetID(pcb), i, i-1);
+						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue and threshold %d, PID %d priority went from %d to %d.\n",
+								cyclesSinceRan, numProcs, threshold, PCBGetID(pcb), i, i-1);
 					}
 				}
 			}
@@ -153,15 +160,14 @@ void scheduler(int interruptType) {
 		PcbPtr pcb = fifoQueueDequeue(newProcesses);
 		PCBSetState(pcb, ready);
 		pqEnqueue(readyProcesses, pcb);
-		//fifoQueueEnqueue(readyProcesses, pcb);
 	}
+	//TODO do we want this here?
 	runStarvationDetector();
 
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
 		if (currProcess) {
 			pqEnqueue(readyProcesses, currProcess);
-			//fifoQueueEnqueue(readyProcesses, currProcess);
 			PCBSetState(currProcess, ready);
 		}
 		dispatcher();
@@ -211,7 +217,6 @@ void genProcesses() {
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
-		//PcbPtr newProc = PCBAllocateSpace();
 		PcbPtr newProc = PCBConstructor(PCBAllocateSpace(), none, NULL);
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
@@ -221,8 +226,6 @@ void genProcesses() {
 			PCBSetState(newProc, created);
 			PCBSetLastQuantum(newProc, currQuantum);
 			fifoQueueEnqueue(newProcesses, newProc);
-
-//			printf("Process created: PID: %d at %lu\n", PCBGetID(newProc), PCBGetCreation(newProc));
 			printf("Process created: PID: %d, Priority %d at %lu\n", PCBGetID(newProc), PCBGetPriority(newProc), PCBGetCreation(newProc));
 		}
 	}
@@ -292,52 +295,6 @@ void genMutualResourceUsers() {
 		fifoQueueEnqueue(newProcesses, Bi);
 	}
 
-//
-//	PcbPtr A0, B0; //, A1, B1, A2, B2, A3, B3, A4, B4;
-//	A0 = PCBConstructor(MUTREC);
-//	B0 = PCBConstructor(MUTREC);
-//	MutexPtr mutex01 = MutexConstructor(0);
-//	MutexPtr mutex02 = MutexConstructor(1);
-//	mutexes[0] = mutex01;
-//	mutexes[1] = mutex02;
-//	PCBSetID(A0, ++currPID);
-//	PCBSetID(B0, ++currPID);
-//	PCBSetMutexIndex(A0, 1, 0);
-//	PCBSetMutexIndex(B0, 1, 0);
-//
-//	PCBSetMutexIndex(A0, 2, 1);
-//	PCBSetMutexIndex(B0, 2, 1);
-//	unsigned int A0_1LockSteps[NUM_MUTEX_STEPS] = {20, 40, 60, 80};
-//	unsigned int B0_1LockSteps[NUM_MUTEX_STEPS] = {20, 40, 60, 80};
-//	PCBSetMutexLockSteps(A0, 1, A0_1LockSteps);
-//	PCBSetMutexLockSteps(B0, 1, B0_1LockSteps);
-//
-//	unsigned int A0_2LockSteps[NUM_MUTEX_STEPS] = {21, 41, 61, 81};
-//	unsigned int B0_2LockSteps[NUM_MUTEX_STEPS] = {21, 41, 61, 81};
-//	PCBSetMutexLockSteps(A0, 2, A0_2LockSteps);
-//	PCBSetMutexLockSteps(B0, 2, B0_2LockSteps);
-//
-//	unsigned int A0_2UnlockSteps[NUM_MUTEX_STEPS] = {23, 43, 63, 83};
-//	unsigned int B0_2UnlockSteps[NUM_MUTEX_STEPS] = {23, 43, 63, 83};
-//	PCBSetMutexUnlockSteps(A0, 2, A0_2UnlockSteps);
-//	PCBSetMutexUnlockSteps(B0, 2, B0_2UnlockSteps);
-//
-//	unsigned int A0_1UnlockSteps[NUM_MUTEX_STEPS] = {24, 44, 64, 84};
-//	unsigned int B0_1UnlockSteps[NUM_MUTEX_STEPS] = {24, 44, 64, 84};
-//	PCBSetMutexUnlockSteps(A0, 1, A0_1UnlockSteps);
-//	PCBSetMutexUnlockSteps(B0, 1, B0_1UnlockSteps);
-//
-//	PCBSetPriority(A0, 0);
-//	PCBSetPriority(B0, 0);
-//
-//	initializeTrapArray(A0);
-//	initializeTrapArray(B0);
-//
-//	printf("Mutrec Process created: PID: %d at %lu\n", PCBGetID(A0), PCBGetCreation(A0));
-//	printf("Mutrec Process created: PID: %d at %lu\n", PCBGetID(B0), PCBGetCreation(B0));
-//
-//	fifoQueueEnqueue(newProcesses, A0);
-//	fifoQueueEnqueue(newProcesses, B0);
 }
 
 /*Saves the state of the CPU to the currently running PCB.*/
@@ -442,7 +399,6 @@ void IO_ISR(int numIO) { //IOCompletionHandler
 		}
 	}
 	pqEnqueue(readyProcesses, pcb);
-	//fifoQueueEnqueue(readyProcesses, pcb);
 	PCBSetState(pcb, ready);
 
 	printf("PID %d put in ready queue\r\n", PCBGetID(pcb));
@@ -707,7 +663,7 @@ void cpu() {
 
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
-				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
 			}
 		}
 
@@ -718,6 +674,8 @@ void cpu() {
 
 int main(void) {
 	srand(time(NULL));
+
+
 	currPID = 0;
 	sysStackPC = 0;
 	timerCount = TIMER_QUANTUM;
@@ -737,7 +695,7 @@ int main(void) {
 		PCBSetPriority(currProcess, rand() % PRIORITY_LEVELS);
 		PCBSetState(currProcess, running);
 		PCBSetLastQuantum(currProcess, currQuantum);
-		printf("Process created: PID: %d at %lu\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
+		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
 		cpu();
 	}
 
