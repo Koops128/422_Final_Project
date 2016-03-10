@@ -73,7 +73,7 @@ int PCBGetMutexIndex(PcbPtr pcb, int mutexNum);
 /*********************************************************************************/
 /*                          	 I/O Related			                         */
 /*********************************************************************************/
-int PCBIsComputeIntensive(PcbPtr pcb)
+int PCBIsComputeIntensive(PcbPtr pcb);
 void initializeTrapArray(PcbPtr pcb);
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
