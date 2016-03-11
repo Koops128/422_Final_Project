@@ -368,6 +368,9 @@ void genProducerConsumerPairs() {
 		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
 
 		addMutex++;
+
+		fifoQueueEnqueue(newProcesses, Producer);
+		fifoQueueEnqueue(newProcesses, Consumer);
 	}
 
 }
