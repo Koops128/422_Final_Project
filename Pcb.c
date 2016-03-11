@@ -36,7 +36,6 @@ typedef struct PCB {
 		PCDataPtr ProConData;
 	} PairDataStr;
 
-	//MR myMR; TODO
 	int starveFlag;
 	State state;
 	unsigned int PC;
@@ -52,23 +51,10 @@ typedef struct PCB {
 	int lastQuantumRan; //The index of the time quantum where it last ran (or quantum created if never ran)
 } PcbStr;
 
-//PcbPtr ProducerConsumerPCBConstructor(ProConPtr procon){
-//	PcbStr* pcb = PCBConstructor();
-//	pcb->myPC = procon;
-//	//pcb->myMR = NULL;
-//	return pcb;
-//}
-
-//PcbPtr ProducerPCBConstructor(ProConPtr procon) {
-//	PcbStr* pcb = PCBConstructor();
-//	//todo stuff
-//	return pcb;
-//}
-//PcbPtr ConsumerPCBConstructor(ProConPtr procon) {
-//	PcbStr* pcb = PCBConstructor();
-//	//todo stuff
-//	return pcb;
-//}
+int PCBIsComputeIntensive(PcbPtr pcb)
+{
+    return PCBGetPriority(pcb) == 0;
+}
 
 unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
 	if (index < NUM_IO_TRAPS) {
@@ -139,6 +125,38 @@ void PCBSetLastQuantum(PcbStr* pcb, unsigned int quantum) {
 
 void PCBProdConsSetMutex(PcbPtr pcb, int mutex) {
 	pcb->PairDataStr.ProConData->mutex = mutex;
+}
+
+int PCBProdConsGetMutex(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData->mutex;
+}
+
+void PCBProdConsSetCondVars(PcbPtr pcb, int bufNotFull, int BufNotEmpty) {
+	pcb->PairDataStr.ProConData->bufNotFull = bufNotFull;
+	pcb->PairDataStr.ProConData->bufNotEmpty = BufNotEmpty;
+}
+
+int PCBProdConsGetBufNotFull(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData->bufNotFull;
+}
+int PCBProdConsGetBufNotEmpty(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData->bufNotEmpty;
+}
+
+void PCBProdConsSetBuffer(PcbPtr pcb, cQPtr buffer) {
+	pcb->PairDataStr.ProConData->buffer = buffer;
+}
+
+cQPtr PCBProdConsGetBuffer(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData->buffer;
+}
+
+void PCBProdConsSetShared(PcbPtr pcb, int sharedResource) {
+	pcb->PairDataStr.ProConData->sharedData = sharedResource;
+}
+
+int PCBProdConsGetShared(PcbPtr pcb) {
+	return pcb->PairDataStr.ProConData->sharedData;
 }
 
 /**
@@ -378,7 +396,6 @@ void initializeTrapArray(PcbStr* pcb) {
 	case mutrecB:
 		genMutrecTraps(pcb, allTraps);
 		break;
-	//TODO prodCon case
 	default :
 		break;
 	}
@@ -402,9 +419,6 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	for(i = 0; i < numTraps; i++) {
 		int randNum = (rand() % (partitionSize)) + (i * partitionSize);
 		allTraps[i] = randNum;
-//		if (i > 0 && LockUnlock[i] == LockUnlock[i - 1] + 1) {
-//			LockUnlock[i - 1] = LockUnlock[i - 1] - 1;
-//		}
 
 	}
 
@@ -424,18 +438,11 @@ void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, un
 	io2[1] = allTraps[6];
 	io2[2] = allTraps[11];
 	io2[3] = allTraps[13];
-		//The wait instruction is somewhere between the first lock/unlock pair
-		//the signal instruction is somewhere between the second lock/unlock pair
-//	wait[0] = (rand() % (unlock[0] - lock[0] - 1)) + lock[0] + 1;
-//	signal[0] = (rand() % (unlock[1] - lock[1] - 1)) + lock[1] + 1;
 
 	free(allTraps);
 }
 
 PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
-	//TODO modify the constructor to make a relationship type
-
-	//PcbStr* pcb = (PcbStr*) malloc(sizeof(PcbStr));
 	pcb->PC = 0;
 	pcb->PID = 1;
 	pcb->priority = 1;
@@ -450,8 +457,10 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 
 	if (theType == producer || theType == consumer) {
 		pcb->relationship->StepsStr.pcSteps = (PCStepsPtr) malloc(sizeof(ProdConsStepsStr));
-
+		pcb->PairDataStr.ProConData = (PCDataPtr) malloc(sizeof(PCDataStr));
+		pcb->PairDataStr.ProConData->sharedData = 0;
 		pcb->relationship->mPartner = partner;
+
 		setPCTraps(pcb->relationship->StepsStr.pcSteps->lock, pcb->relationship->StepsStr.pcSteps->unlock,
 				pcb->relationship->StepsStr.pcSteps->wait, pcb->relationship->StepsStr.pcSteps->signal,
 				pcb->IO_1_Traps, pcb->IO_2_Traps);
@@ -480,8 +489,6 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner){
 
 		free(allTraps);
 	}
-
-	//genIOArrays(pcb);
 
 	return pcb;
 }
@@ -552,104 +559,15 @@ void PCBDestructor(PcbPtr pcb) {
 //TODO Produce and Consume methods
 //These will call the CQ
 
-///* this is different than waiting for a mutex.
-// * This should unlock the mutex it’s holding… it should be holding one since a wait should only be inside a critical section,
-// * then return an int (1 or 0) saying whether this PCB needs to wait or not.
-// * If it returns a “yes” - 1, then the CPU should take it out of the running state, and put into blocked...
-// * but NOT put back into ready queue.  This PCB will get put back into ready queue when whatever signal
-// * it’s waiting on is set by the other PCB in this pair.*/
-//
-//int ProConWait(PcbPtr waiter) {
-//	if(waiter->relationship->mType == producer /*&& shared resource is full*/
-//			|| waiter->relationship->mType == consumer /*&& shared resource is empty*/) {
-//		//put this process in the waiting queue of the condition variable
-//		//unlock the mutex it's holding
-//		return 1;//is waiting
-//	}
-//	return 0;//is not waiting
-//}
-//
-///* The way this will work, is this is doing the “producing” and “consuming” work while at the same time signaling.
-// * It will check if the passed in PCB is the producer, if so, then it will first check
-// * if bufavail is at it’s max AND if the WAITING variable is true.
-// * If so, then we know that the consumer is waiting, so we want to return the consumer process.
-// * So we set the return PcbPtr to consumer.  Then we decrement bufavail to do the “producing” work.
-// * In the opposite situation, if the passed in PCB is the consumer, and if bufavail is at 0 AND the WAITING is true,
-// * then we know the producer is waiting, so set the return PcbPtr to the producer.  Then increment the bufavail
-// * to do the “consuming” work. And then the CPU should know what to do with what is given back.
-// * If what is returned is a null pointer, then do nothing.
-// * Otherwise, we know we need to put whatever was returned back into the ready queue, because it’s no longer waiting.*/
-//
-//PcbPtr ProConSignal(PcbPtr signaler) {
-//	PcbPtr toReturn = NULL;
-//	if (0/*(shared variable is currently empty
-//	 	 	|| shared variable is currently full) && partner is waiting*/) {
-//		toReturn = signaler->relationship->mPartner;
-//		//take the partner out of the condition variable's waiting queue?
-//
-//	}
-//	if (signaler->relationship->mType == producer) {
-//		//Put something in the shared resource
-//		//decrease availability of shared resource
-//	} else {
-//		//Take something out of the shared resource
-//		//increase availability of shared resource
-//	}
-//	return toReturn;
-//}
 
-//int main(void) {
-//	srand(time(NULL));
-//
-//	PcbPtr Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
-//	PcbPtr Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
-//
-//	PCBConstructor(Producer, producer, Consumer);
-//	PCBSetID(Producer, 1);
-//	PCBSetPriority(Producer, rand() % 16);
-//	printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
-//
-//	PCBConstructor(Consumer, consumer, Producer);
-//	PCBSetID(Consumer, 2);
-//	PCBSetPriority(Consumer, rand() % 16);
-//	printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
-//
-//	int i;
-//	printf("\nProducer steps\n");
-//	PCStepsPtr pcSteps = PCBGetPCSteps(Producer);
-//	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
-//		printf("Lock: %d\n", pcSteps->lock[i]);
-//		printf("Wait: %d\n", pcSteps->wait[0]);
-//		printf("Signal: %d\n", pcSteps->signal[0]);
-//		printf("Unlock: %d\n", pcSteps->unlock[i]);
-//	}
-//
-////	printf("\nConsumer steps\n");
-////	pcSteps = PCBGetPCSteps(Consumer);
-////	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
-////		printf("Lock: %d\n", pcSteps->lock[i]);
-////		printf("Wait: %d\n", pcSteps->wait[0]);
-////		printf("Signal: %d\n", pcSteps->signal[0]);
-////		printf("Unlock: %d\n", pcSteps->unlock[i]);
-////	}
-//
-//	printf("\nProducer IO 1 steps\n");
-//	for (i = 0; i < NUM_IO_TRAPS; i++) {
-//		printf("IO 1: %d\n", PCBGetIO1Trap(Producer, i));
-//	}
-//	printf("\nProducer IO 2 steps\n");
-//	for (i = 0; i < NUM_IO_TRAPS; i++) {
-//		printf("IO 2: %d\n", PCBGetIO2Trap(Producer, i));
-//	}
-//
-////	printf("\nConsumer IO 1 steps\n");
-////	for (i = 0; i < NUM_IO_TRAPS; i++) {
-////		printf("IO 1: %d\n", PCBGetIO1Trap(Consumer, i));
-////	}
-////	printf("\nConsumer IO 2 steps\n");
-////	for (i = 0; i < NUM_IO_TRAPS; i++) {
-////		printf("IO 2: %d\n", PCBGetIO2Trap(Consumer, i));
-////	}
-//}
+void ProdConsProduce(PcbPtr Producer) {
+	pushCQ(Producer->PairDataStr.ProConData->buffer, Producer->PairDataStr.ProConData->sharedData);
+	printf("Producer PID %d produced value %d", Producer->PID, Producer->PairDataStr.ProConData->sharedData);
+	Producer->PairDataStr.ProConData->sharedData++;
+}
 
-
+void ProdConsConsume(PcbPtr Consumer) {
+	int* popped = 0;
+	popCQ(Consumer->PairDataStr.ProConData->buffer, popped);
+	printf("Consumer PID %d consumed value %d", Consumer->PID, popped);
+}
