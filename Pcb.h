@@ -139,6 +139,9 @@ void PCBProdConsSetShared(PcbPtr pcb, int sharedResource);
 int PCBProdConsGetBufNotFull(PcbPtr pcb);
 int PCBProdConsGetBufNotEmpty(PcbPtr pcb);
 int PCBProdConsGetShared(PcbPtr pcb);
+PCDataPtr PCBGetPCData(PcbPtr pcb);
+void ProdConsProduce(PcbPtr Producer);
+void ProdConsConsume(PcbPtr Consumer);
 
 /*Contains the steps arrays specific to a mutual resource user
  *for locking/unlocking each of its two mutexes.*/
