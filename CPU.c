@@ -354,7 +354,6 @@ void genProducerConsumerPairs() {
 		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
 		PCBProdConsSetBuffer(Producer, buffer);
 		initializeTrapArray(Producer);
-		fifoQueueEnqueue(newProcesses, Producer);
 		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
 
 		PCBConstructor(Consumer, consumer, Producer);
@@ -365,11 +364,12 @@ void genProducerConsumerPairs() {
 		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
 		PCBProdConsSetBuffer(Consumer, buffer);
 		initializeTrapArray(Consumer);
-		fifoQueueEnqueue(newProcesses, Consumer);
 		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
 
 		addMutex++;
 
+		fifoQueueEnqueue(newProcesses, Producer);
+		fifoQueueEnqueue(newProcesses, Consumer);
 	}
 
 }
@@ -696,72 +696,72 @@ void cpu() {
 
 	int simCounter = 0;
 
-//	while (simCounter <= SIMULATION_END) {
-//
-////		checkTimerInterrupt();
-////		if(!PCBIsComputeIntensive(currProcess))
-////		{
-////			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
-////		}
-//
-//
-//		/******************************************
-//		 *		Checking for Termination
-//		 ******************************************/
-//		/* Before we increment the SysStack, we need to know if the process is at its max PC (so we don't go beyond it). */
-////		if(checkTermCountAndTermination()){
-////			continue;
-////			/*We have just loaded a new process; If we did rest of iteration, we might risk
-////			executing lines of this process, without first checking if it's at its max pc.*/
-////		}
-//
-//		/** Now that we know the current process is not at the end,
-//		 * we can safely increment the sys stack pc.  **/
-//		sysStackPC++;
-//
-////		if(!PCBIsComputeIntensive(currProcess))
-////		{
-////			checkIOTraps();
-////		}
-//
-//		//TODO delete this when done debugging.
-//		if (currProcess) {
-//			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
-//		}
-//
-//		/******************************************
-//		 *		Checking Mutual Resource User
-//		 ******************************************/
-////		if(!PCBIsComputeIntensive(currProcess))
-////		{
-////			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
-////			if (!notBlockedByLock()) {
-////				//TODO make an isr for this
-////				scheduler(BLOCKED_BY_LOCK);
-////				simCounter++;
-////				continue;
-////			} else {
-////				PcbPtr wasWaitingPcb = checkUnlock();
-////				if (wasWaitingPcb) {
-////					//TODO make an isr for this
-////					pqEnqueue(readyProcesses, wasWaitingPcb);
-////				}
-////			}
-////
-////			printIfInCriticalSection();
-////
-////			}
-////		}
-//
-////		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
-////			if (deadlockDetect()) {
-////				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
-////			}
-////		}
-//
-//		//at end
-//		simCounter++;
-//	}
+	while (simCounter <= SIMULATION_END) {
+
+		checkTimerInterrupt();
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
+		}
+
+
+		/******************************************
+		 *		Checking for Termination
+		 ******************************************/
+		/* Before we increment the SysStack, we need to know if the process is at its max PC (so we don't go beyond it). */
+		if(checkTermCountAndTermination()){
+			continue;
+			/*We have just loaded a new process; If we did rest of iteration, we might risk
+			executing lines of this process, without first checking if it's at its max pc.*/
+		}
+
+		/** Now that we know the current process is not at the end,
+		 * we can safely increment the sys stack pc.  **/
+		sysStackPC++;
+
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			checkIOTraps();
+		}
+
+		//TODO delete this when done debugging.
+		if (currProcess) {
+			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
+		}
+
+		/******************************************
+		 *		Checking Mutual Resource User
+		 ******************************************/
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
+			if (!notBlockedByLock()) {
+				//TODO make an isr for this
+				scheduler(BLOCKED_BY_LOCK);
+				simCounter++;
+				continue;
+			} else {
+				PcbPtr wasWaitingPcb = checkUnlock();
+				if (wasWaitingPcb) {
+					//TODO make an isr for this
+					pqEnqueue(readyProcesses, wasWaitingPcb);
+				}
+			}
+
+			printIfInCriticalSection();
+
+			}
+		}
+
+		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+			if (deadlockDetect()) {
+				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+			}
+		}
+
+		//at end
+		simCounter++;
+	}
 }
 
 int main(void) {
