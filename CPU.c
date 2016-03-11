@@ -29,7 +29,10 @@
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
-
+#define P0_FREQ 5				// frequency (as a percentage) of priority 0 processes
+#define P1_FREQ P0_FREQ + 80
+#define P2_FREQ P1_FREQ + 10
+#define P3_FREQ P2_FREQ + 5
 
 /*==========================================
  * 			Global Variables
@@ -211,6 +214,31 @@ void scheduler(int interruptType) {
  *				Process Generation
  *=================================================*/
 
+/**
+ * Ensures that priority levels only occur a certain percentage of the time.
+ * Returns the priority level based on desired frequency (defined at the top of this file).
+ */
+int ensureFreq()
+{
+	int randNum = (rand() % 100) + 1;
+	if(randNum <= P0_FREQ)
+	{
+		return 0;
+	}
+	else if(randNum <= P1_FREQ)
+	{
+		return 1;
+	}
+	else if(randNum <= P2_FREQ)
+	{
+		return 2;
+	}
+	else
+	{
+		return 3;
+	}
+}
+
 /*Randomly generates between 0 and <NEW_PROCS> new processes and enqueues them to the New Processes Queue.*/
 void genProcesses() {
 	int i;
@@ -222,7 +250,7 @@ void genProcesses() {
 		{
 			currPID++;
 			PCBSetID(newProc, currPID);
-			PCBSetPriority(newProc, rand() % PRIORITY_LEVELS);
+			PCBSetPriority(newProc, ensureFreq());
 			PCBSetState(newProc, created);
 			PCBSetLastQuantum(newProc, currQuantum);
 			fifoQueueEnqueue(newProcesses, newProc);
@@ -249,7 +277,7 @@ void genMutualResourceUsers() {
 
 	int i;
 	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
-		int priority = rand() % PRIORITY_LEVELS;
+		int priority = ensureFreq();
 		PcbPtr Ai = PCBAllocateSpace();
 		PcbPtr Bi = PCBAllocateSpace();
 		PCBConstructor(Ai, mutrecA, Bi);
@@ -692,7 +720,7 @@ int main(void) {
 	if(currProcess != NULL)
 	{
 		PCBSetID(currProcess, currPID);
-		PCBSetPriority(currProcess, rand() % PRIORITY_LEVELS);
+		PCBSetPriority(currProcess, ensureFreq());
 		PCBSetState(currProcess, running);
 		PCBSetLastQuantum(currProcess, currQuantum);
 		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
