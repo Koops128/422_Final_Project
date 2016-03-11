@@ -17,15 +17,16 @@
 #define IO_COMPLETION 		4
 #define BLOCKED_BY_LOCK 	5
 #define LOCK_UNBLOCK 		6
+#define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 1//5			//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_MUT_REC_PAIRS 	1			//The number of pairs of processes with two mutexes blocking critical section
 #define NUM_PRO_CON_PAIRS	1
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 
 #define NEW_PROCS		6				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	10000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
@@ -53,7 +54,13 @@ FifoQueue* newProcesses;
 PQPtr readyProcesses;
 FifoQueue* terminatedProcesses;
 
-
+typedef enum {
+	lockTrap=0,
+	unlockTrap=1,
+	waitTrap=2,
+	signalTrap=3,
+	noTrap=4
+} ProdConsTrapType;
 
 /*=================================================
  *					IO Device Type
@@ -202,6 +209,11 @@ void scheduler(int interruptType) {
 	case BLOCKED_BY_LOCK :
 		if (currProcess) {
 			PCBSetPC(currProcess, sysStackPC); //save it's pc, but don't put in ready queue; the mutex wait queue is holding it.
+			dispatcher();
+		}
+		break;
+	case PRO_CON_INTERRUPT :
+		if (currProcess) {
 			dispatcher();
 		}
 		break;
@@ -520,7 +532,7 @@ void checkIOInterrupts() {
 
 
 /*=================================================
- *			IO Request Check and Handler
+ *			IO/TRAP Request Check and Handlers
  *=================================================*/
 
 /**Makes a new request to device*/
@@ -567,6 +579,95 @@ void checkIOTraps() {
 		printf("I/O trap request: I/O device 2, ");
 		IOTrapHandler(device2);
 	}
+}
+
+ProdConsTrapType checkProdConsRequest() {
+	PCStepsPtr pcSteps = PCBGetPCSteps(currProcess);
+
+	int i;
+	if (currProcess) {
+		for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+			if (pcSteps->lock[i] == sysStackPC)
+				return lockTrap;
+			else if (pcSteps->unlock[i] == sysStackPC)
+				return unlockTrap;
+		}
+		for (i = 0; i < PC_WAIT; i++) {
+			if (pcSteps->wait[i] == sysStackPC)
+				return waitTrap;
+		}
+		for (i = 0; i < PC_SIGNAL; i++) {
+			if (pcSteps->signal[i] == sysStackPC)
+				return signalTrap;
+		}
+	}
+	return noTrap;
+}
+
+int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
+	printf("ProdConsTrapHandler trapRequest: %d\n", trapRequest);
+
+	saveCpuToPcb();
+	PCBSetState(currProcess, blocked);
+	int contextSwitch = 0; //0 for no context switch, 1 for context switch
+
+	PcbPtr notWaitingAnymore = NULL;
+	switch(trapRequest) {
+		case lockTrap :
+			//if lock, then call the pair's mutex for a lock.  If it needs to wait for the lock,
+			//then call the scheduler with an interrupt
+			if(!MutexLock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess)) {
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			}
+			break;
+		case unlockTrap :
+			//if unlock, then call the pair's mutex to unlock
+			MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
+			break;
+		case signalTrap :
+			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
+
+			//if producer call produce method, else call consumer method, then call signal
+			if (PCBgetPairType(currProcess) == producer) {
+				ProdConsProduce(currProcess);
+				notWaitingAnymore = CondVarSignal(condVars[PCBProdConsGetBufNotEmpty(currProcess)], currProcess);
+			} else {
+				ProdConsConsume(currProcess);
+				notWaitingAnymore = CondVarSignal(condVars[PCBProdConsGetBufNotFull(currProcess)], currProcess);
+			}
+
+			if (notWaitingAnymore) {
+				pqEnqueue(readyProcesses, notWaitingAnymore);
+				PCBSetState(notWaitingAnymore, ready);
+			}
+
+			break;
+		case waitTrap :
+			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
+
+			if (PCBgetPairType(currProcess) == producer
+					&& bufFull(PCBProdConsGetBuffer(currProcess))) {
+				CondVarWait(condVars[PCBProdConsGetBufNotFull(currProcess)],
+						    mutexes[PCBProdConsGetMutex(currProcess)],
+						    currProcess);
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			} else if (PCBProdConsGetBuffer(currProcess)){
+				CondVarWait(condVars[PCBProdConsGetBufNotEmpty(currProcess)],
+										    mutexes[PCBProdConsGetMutex(currProcess)],
+										    currProcess);
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			}
+			break;
+		default:
+			break;
+	}
+	if (!contextSwitch) {
+		PCBSetState(currProcess, running);
+	}
+	return contextSwitch;
 }
 
 /*=================================================
@@ -750,6 +851,13 @@ void cpu() {
 
 			printIfInCriticalSection();
 
+			} else if (PCBgetPairType(currProcess) == producer || PCBgetPairType(currProcess) == consumer) {
+				ProdConsTrapType trapRequest = checkProdConsRequest();
+				if ((trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap)
+						&& ProdConsTrapHandler(trapRequest)) {
+					simCounter++;
+					continue;
+				}
 			}
 		}
 
