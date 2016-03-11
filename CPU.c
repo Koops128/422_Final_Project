@@ -5,6 +5,7 @@
 #include "Fifo.h"
 #include "PriorityQueue.h"
 #include "Mutex.h"
+#include "CondVar.h"
 
 
 //typedef enum interruptType {
@@ -19,7 +20,8 @@
 #define LOCK_UNBLOCK 		6
 
 #define NUM_MUT_REC_PAIRS 1//5			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_MUTEXES		  NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
+#define NUM_PRO_CON_PAIRS	1
+#define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 
 #define NEW_PROCS		6				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
@@ -45,6 +47,7 @@ unsigned int currQuantum;
 PcbPtr currProcess;
 
 MutexPtr mutexes[NUM_MUTEXES];
+CondVarPtr condVars[NUM_PRO_CON_PAIRS * 2];
 
 /**		Queues		**/
 FifoQueue* newProcesses;
@@ -322,6 +325,49 @@ void genMutualResourceUsers() {
 
 		fifoQueueEnqueue(newProcesses, Ai);
 		fifoQueueEnqueue(newProcesses, Bi);
+	}
+
+}
+
+void genProducerConsumerPairs() {
+	PcbPtr Producer;
+	PcbPtr Consumer;
+	int i;
+	int addMutex = NUM_MUT_REC_PAIRS * 2;
+
+	for (i = 0; i < NUM_PRO_CON_PAIRS; i++) {
+		Producer = PCBAllocateSpace();
+		Consumer = PCBAllocateSpace();
+
+		mutexes[addMutex] = MutexConstructor(addMutex);
+		int condVarID1 = 2 * i;
+		int condVarID2 = (2 * i) + 1;
+		condVars[condVarID1] = CondVarConstructor(condVarID1);
+		condVars[condVarID2] = CondVarConstructor(condVarID2);
+		cQPtr buffer = makeCQ(PC_BUFFER_SIZE);
+		int priority = ensureFreq();
+
+		PCBConstructor(Producer, producer, Consumer);
+		currPID++;
+		PCBSetID(Producer, currPID);
+		PCBSetPriority(Producer, priority);
+		PCBProdConsSetMutex(Producer, addMutex);
+		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Producer, buffer);
+		fifoQueueEnqueue(newProcesses, Producer);
+		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+
+		PCBConstructor(Consumer, consumer, Producer);
+		currPID++;
+		PCBSetID(Consumer, currPID);
+		PCBSetPriority(Consumer, priority);
+		PCBProdConsSetMutex(Consumer, addMutex);
+		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Consumer, buffer);
+		fifoQueueEnqueue(newProcesses, Consumer);
+		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+
+		addMutex++;
 	}
 
 }
@@ -642,6 +688,7 @@ void cpu() {
 	//TODO comment back in when done testing mut rec
 	genProcesses();
 	genMutualResourceUsers();
+	genProducerConsumerPairs();
 
 	printf("\nBegin Simulation:\n\n");
 
