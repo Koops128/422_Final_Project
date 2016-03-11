@@ -27,6 +27,7 @@
 #define PC_WAIT 1
 #define PC_SIGNAL 1
 #define MAX_SHARED_SIZE 5
+#define PC_BUFFER_SIZE 10
 
 //SHARED RESOURCE DEFINES
 #define SR_LOCK_UNLOCK 			2
@@ -92,10 +93,13 @@ typedef struct MRData{
 
 typedef struct PCData{
 	int mutex;
-	int condVar1;
-	int condVar2;
+	int bufNotFull;
+	int bufNotEmpty;
 	cQPtr buffer;
+	int sharedData;
 } PCDataStr;
+
+int PCBIsComputeIntensive(PcbPtr pcb);
 
 unsigned int PCBGetIO1Trap(PcbPtr pcb, int index);
 unsigned int PCBGetIO2Trap(PcbPtr pcb, int index);
@@ -137,6 +141,14 @@ void PCBSetStarveBoostFlag(PcbPtr pcb, int flag);
 void PCBSetLastQuantum(PcbPtr pcb, unsigned int quantum);
 
 void PCBProdConsSetMutex(PcbPtr pcb, int mutex);
+int PCBProdConsGetMutex(PcbPtr pcb);
+void PCBProdConsSetCondVars(PcbPtr pcb, int bufNotFull, int bufNotEmpty);
+void PCBProdConsSetBuffer(PcbPtr pcb, cQPtr buffer);
+cQPtr PCBProdConsGetBuffer(PcbPtr pcb);
+void PCBProdConsSetShared(PcbPtr pcb, int sharedResource);
+int PCBProdConsGetBufNotFull(PcbPtr pcb);
+int PCBProdConsGetBufNotEmpty(PcbPtr pcb);
+int PCBProdConsGetShared(PcbPtr pcb);
 
 /**
  * Returns PC of this PCB.
@@ -200,6 +212,10 @@ void PCBDestructor(PcbPtr pcb);
 //PcbPtr ProConSignal(PcbPtr signaler);
 
 void initializeTrapArray(PcbPtr pcb);
+
+void ProdConsProduce(PcbPtr Producer);
+
+void ProdConsConsume(PcbPtr Consumer);
 
 /*********************************************************************************/
 /*                          	 Mutex Related			                         */
