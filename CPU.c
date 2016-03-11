@@ -7,7 +7,6 @@
 #include "Mutex.h"
 #include "CondVar.h"
 
-
 //typedef enum interruptType {
 //	TIMER, TERMINATE, IO_REQUEST, IO_COMPLETION, LOCK_BLOCK, LOCK_UNBLOCK
 //} interruptType;
@@ -18,7 +17,6 @@
 #define IO_COMPLETION 		4
 #define BLOCKED_BY_LOCK 	5
 #define LOCK_UNBLOCK 		6
-#define PRO_CON_INTERRUPT 	7
 
 #define NUM_MUT_REC_PAIRS 1//5			//The number of pairs of processes with two mutexes blocking critical section
 #define NUM_PRO_CON_PAIRS	1
@@ -27,7 +25,7 @@
 #define NEW_PROCS		6				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	100//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	10000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
@@ -55,13 +53,6 @@ FifoQueue* newProcesses;
 PQPtr readyProcesses;
 FifoQueue* terminatedProcesses;
 
-typedef enum {
-	lockTrap=0,
-	unlockTrap=1,
-	waitTrap=2,
-	signalTrap=3,
-	noTrap=4
-} ProdConsTrapType;
 
 
 /*=================================================
@@ -211,11 +202,6 @@ void scheduler(int interruptType) {
 	case BLOCKED_BY_LOCK :
 		if (currProcess) {
 			PCBSetPC(currProcess, sysStackPC); //save it's pc, but don't put in ready queue; the mutex wait queue is holding it.
-			dispatcher();
-		}
-		break;
-	case PRO_CON_INTERRUPT :
-		if (currProcess) {
 			dispatcher();
 		}
 		break;
@@ -704,7 +690,6 @@ void cpu() {
 	//TODO comment back in when done testing mut rec
 	genProcesses();
 	genMutualResourceUsers();
-	genProducerConsumerPairs();
 
 	printf("\nBegin Simulation:\n\n");
 
@@ -743,35 +728,27 @@ void cpu() {
 			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
 		}
 
-		/****************************************************************
-		 *		Checking Mutual Resource User and producer consumer
-		 ****************************************************************/
+		/******************************************
+		 *		Checking Mutual Resource User
+		 ******************************************/
 		if(!PCBIsComputeIntensive(currProcess))
 		{
 			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
-				if (!notBlockedByLock()) {
-					//TODO make an isr for this
-					scheduler(BLOCKED_BY_LOCK);
-					simCounter++;
-					continue;
-				} else {
-					PcbPtr wasWaitingPcb = checkUnlock();
-					if (wasWaitingPcb) {
-						//TODO make an isr for this
-						pqEnqueue(readyProcesses, wasWaitingPcb);
-					}
-				}
-
-				printIfInCriticalSection();
-
-			} else if ((PCBgetPairType(currProcess) == producer || PCBgetPairType(currProcess) == consumer)) {
-				ProdConsTrapType trapRequest = checkProdConsRequest();
-				if (trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap) {
-					contextSwitch =  ProdConsTrapHandler(trapRequest);
-				}
-
+			if (!notBlockedByLock()) {
+				//TODO make an isr for this
+				scheduler(BLOCKED_BY_LOCK);
 				simCounter++;
 				continue;
+			} else {
+				PcbPtr wasWaitingPcb = checkUnlock();
+				if (wasWaitingPcb) {
+					//TODO make an isr for this
+					pqEnqueue(readyProcesses, wasWaitingPcb);
+				}
+			}
+
+			printIfInCriticalSection();
+
 			}
 		}
 
@@ -789,17 +766,18 @@ void cpu() {
 int main(void) {
 	srand(time(NULL));
 
-
 	currPID = 0;
 	sysStackPC = 0;
 	timerCount = TIMER_QUANTUM;
+	currQuantum = 0;
+
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = pqConstructor();
 	terminatedProcesses = fifoQueueConstructor();
 	device1 = IODeviceConstructor();
 	device2 = IODeviceConstructor();
 
-	currQuantum = 0;
+	printf("Sean Markus\r\nWing-Sea Poon\r\nAbigail Smith\r\nTabi Stein\r\n\r\n");
 
 	//An initial process to start with
 	currProcess = PCBConstructor(PCBAllocateSpace(), none, NULL);
