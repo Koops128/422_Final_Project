@@ -92,22 +92,26 @@ void dispatcher() {
 /*=================================================
  *				Starvation Detection
  *=================================================*/
-/*	A process is "starving" if it hasn't run for (numProcessesInQueue)*(priorityLevel)
- *  quantums. Appropriately, more processes in the system means each process is expected
- *  to get less time to run. Also, lower priority level means we expect the process not
- *  to have run for a longer time.
- *  A "baseline" would be equal running time for each process, so we would expect a process
- *  not to have run for (numProcessesInQueue) quantums before promoting it. Multiplying by
- *  the priority level is thus a way to weight this so lower priority processes aren't
- *  expected to get as much CPU time as higher priority ones.
+/*	A process is "starving" if it hasn't run for (100)*(priorityLevel) quantums.
+ *  Lower priority level means we expect the process not to have run for a longer time,
+ *  so multiplying by priorityLevel is a way to weight this. I wanted to include
+ *  the number of processes in the queue as a contributing factor, but I realized this
+ *  1) entirely prevents old lower priority processes that have never run from being promoted
+ *  if we keep getting new high priority ones and 2) number of processes is implicitly
+ *  a penalty on promotion since the process must be enqueued at the tail of the queue above it,
+ *  and the longer that queue is, the more time it has to wait. Hence, a constant definition
+ *  of starvation does not cause low priority processes to unfairly steal CPU time from higher
+ *  ones.
  */
 void runStarvationDetector() {
 	//sum up number of processes
 	int i, numProcs = 0;
 	printf("\n---Running S Detector---\n");
+	numProcs = currPID;
+	int procsPerLevel[PRIORITY_LEVELS];
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
-		numProcs += ((readyProcesses->priorityArray)[i])->size;
-		printf("Queue %d has %d processes\n", i, ((readyProcesses->priorityArray)[i])->size);
+		procsPerLevel[i] = ((readyProcesses->priorityArray)[i])->size;
+		printf("Queue %d has %d processes, head ran %d quanta ago\n", i, procsPerLevel[i], currQuantum - PCBGetLastQuantum((fifoQueuePeek((readyProcesses->priorityArray)[i]))));
 	}
 
 	//Check head of each priority level (besides top) and see if it needs boosting
@@ -115,6 +119,7 @@ void runStarvationDetector() {
 	//(Only check heads since going through the entire queues would be a lot of overhead)
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
 		FifoQueue* fq = (readyProcesses->priorityArray)[i];
+
 		if (fq) {
 			PcbPtr pcb = fifoQueuePeek(fq);
 			if (pcb) {
@@ -123,17 +128,18 @@ void runStarvationDetector() {
 					//toggle flag and demote to lower level.
 					PCBSetPriority(pcb, i + 1);
 					PCBSetStarveBoostFlag(pcb, 0);
-				}
-				//	Test if should be promoted
-				if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
-					int threshold = numProcs * (i+1);
+					pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
+				}				//	Test if should be promoted
+				else if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
+					int threshold = 100*i;
 					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
 					if (cyclesSinceRan > threshold ) {
 						PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
 						PCBSetStarveBoostFlag(pcb, 1);
 						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
 
-						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue, PID %d priority went from %d to %d.\n", cyclesSinceRan, numProcs, PCBGetID(pcb), i, i-1);
+						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue and threshold %d, PID %d priority went from %d to %d.\n",
+								cyclesSinceRan, numProcs, threshold, PCBGetID(pcb), i, i-1);
 					}
 				}
 			}
@@ -676,6 +682,8 @@ void genProducerConsumerPairs() {
 void checkTimerInterrupt() {
 	if (timerCheck() == 1) {
 		genProcesses();
+		currQuantum++;
+		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
 		if (currProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
