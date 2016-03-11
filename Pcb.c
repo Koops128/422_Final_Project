@@ -99,6 +99,39 @@ void genMutrecTraps(PcbStr* pcb, unsigned int storage[NUM_IO_TRAPS * 2]) {
 	}
 }
 
+/*Helper method to generate the step instructions for producer/consumer PCBs*/
+void setPCTraps(unsigned int* lock, unsigned int* unlock, unsigned int* wait, unsigned int* signal,
+		unsigned int* io1, unsigned int* io2) {
+	int numTraps = NUM_IO_TRAPS * 2 + PC_LOCK_UNLOCK * 2 + PC_WAIT + PC_SIGNAL;
+	unsigned int* allTraps = malloc(sizeof(unsigned int) * numTraps);
+	int partitionSize = (MAX_PC - 1) / numTraps;
+	int i;
+	for(i = 0; i < numTraps; i++) {
+		int randNum = (rand() % (partitionSize)) + (i * partitionSize);
+		allTraps[i] = randNum;
+
+	}
+
+	lock[0] = allTraps[2];
+	lock[1] = allTraps[7];
+	unlock[0] = allTraps[4];
+	unlock[1] = allTraps[9];
+	wait[0] = allTraps[3];
+	signal[0] = allTraps[8];
+
+	io1[0] = allTraps[0];
+	io1[1] = allTraps[5];
+	io1[2] = allTraps[10];
+	io1[3] = allTraps[12];
+
+	io2[0] = allTraps[1];
+	io2[1] = allTraps[6];
+	io2[2] = allTraps[11];
+	io2[3] = allTraps[13];
+
+	free(allTraps);
+}
+
 
 /*If the PCB is a mutual resource user, please call this after initializing the lock and unlock step arrays.*/
 void initializeTrapArray(PcbStr* pcb) {
@@ -115,7 +148,18 @@ void initializeTrapArray(PcbStr* pcb) {
 	case mutrecB:
 		genMutrecTraps(pcb, allTraps);
 		break;
-	//TODO prodCon case
+	case producer:
+		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
+				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
+				pcb->IO_1_Traps, pcb->IO_2_Traps);
+		return;
+		break;
+	case consumer:
+		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
+				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
+				pcb->IO_1_Traps, pcb->IO_2_Traps);
+		return;
+		break;
 	default :
 		break;
 	}
@@ -148,7 +192,7 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner) {
 	pcb->priority = 1;
 	pcb->state = created;
 	pcb->creation = time(NULL);
-	pcb->maxPC = 2000;
+	pcb->maxPC = MAX_PC;
 	pcb->terminate = rand()%10;	//ranges from 0-10
 	pcb->term_count = 0;
 	pcb->starveBoostFlag = 0;
@@ -162,9 +206,17 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner) {
 	if (theType == mutrecA || theType == mutrecB) {
 		pcb->MutRecData = malloc(sizeof(MRDataPtr));
 		pcb->mRelation.mrSteps = malloc(sizeof(MutRecStepsStr));
+	} else if (theType == producer || theType == consumer) {
+		pcb->mRelation.pcSteps = (PCStepsPtr) malloc(sizeof(ProdConsStepsStr));
+		pcb->ProConData = (PCDataPtr) malloc(sizeof(PCDataStr));
+		pcb->ProConData->sharedData = 0;
+
+//		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
+//				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
+//				pcb->IO_1_Traps, pcb->IO_2_Traps);
 	}
 
-	if (theType != mutrecA && theType != mutrecB) {
+	if (theType != mutrecA && theType != mutrecB && theType != producer && theType != consumer) {
 		initializeTrapArray(pcb);
 	}
 
@@ -285,6 +337,46 @@ RelationshipType PCBgetPairType(PcbStr* pcb) {
 	} else {
 		return none; //Just the most generic thing I can think of returning if pcb is null.
 	}
+}
+
+PCStepsPtr PCBGetPCSteps(PcbPtr pcb) {
+	return pcb->mRelation.pcSteps;
+}
+
+void PCBProdConsSetMutex(PcbPtr pcb, int mutex) {
+	pcb->ProConData->mutex = mutex;
+}
+
+int PCBProdConsGetMutex(PcbPtr pcb) {
+	return pcb->ProConData->mutex;
+}
+
+void PCBProdConsSetCondVars(PcbPtr pcb, int bufNotFull, int BufNotEmpty) {
+	pcb->ProConData->bufNotFull = bufNotFull;
+	pcb->ProConData->bufNotEmpty = BufNotEmpty;
+}
+
+int PCBProdConsGetBufNotFull(PcbPtr pcb) {
+	return pcb->ProConData->bufNotFull;
+}
+int PCBProdConsGetBufNotEmpty(PcbPtr pcb) {
+	return pcb->ProConData->bufNotEmpty;
+}
+
+void PCBProdConsSetBuffer(PcbPtr pcb, cQPtr buffer) {
+	pcb->ProConData->buffer = buffer;
+}
+
+cQPtr PCBProdConsGetBuffer(PcbPtr pcb) {
+	return pcb->ProConData->buffer;
+}
+
+void PCBProdConsSetShared(PcbPtr pcb, int sharedResource) {
+	pcb->ProConData->sharedData = sharedResource;
+}
+
+int PCBProdConsGetShared(PcbPtr pcb) {
+	return pcb->ProConData->sharedData;
 }
 
 /*********************************************************************************/
@@ -496,7 +588,62 @@ char *PCBToString(PcbStr* pcb) {
 /*                         			Tests				                         */
 /*********************************************************************************/
 
-
+/*test creating producer consumers*/
+//int main(void) {
+//	srand(time(NULL));
+//
+//	PcbPtr Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//	PcbPtr Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//
+//	PCBConstructor(Producer, producer, Consumer);
+//	PCBSetID(Producer, 1);
+//	PCBSetPriority(Producer, rand() % 16);
+//	initializeTrapArray(Producer);
+//	printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+//
+//	PCBConstructor(Consumer, consumer, Producer);
+//	PCBSetID(Consumer, 2);
+//	PCBSetPriority(Consumer, rand() % 16);
+//	initializeTrapArray(Consumer);
+//	printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+//
+//	int i;
+//	printf("\nProducer steps\n");
+//	PCStepsPtr pcSteps = PCBGetPCSteps(Producer);
+//	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+//		printf("Lock: %d\n", pcSteps->lock[i]);
+//		printf("Wait: %d\n", pcSteps->wait[0]);
+//		printf("Signal: %d\n", pcSteps->signal[0]);
+//		printf("Unlock: %d\n", pcSteps->unlock[i]);
+//	}
+//
+////	printf("\nConsumer steps\n");
+////	pcSteps = PCBGetPCSteps(Consumer);
+////	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+////		printf("Lock: %d\n", pcSteps->lock[i]);
+////		printf("Wait: %d\n", pcSteps->wait[0]);
+////		printf("Signal: %d\n", pcSteps->signal[0]);
+////		printf("Unlock: %d\n", pcSteps->unlock[i]);
+////	}
+//
+//	printf("\nProducer IO 1 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 1: %d\n", PCBGetIO1Trap(Producer, i));
+//	}
+//	printf("\nProducer IO 2 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 2: %d\n", PCBGetIO2Trap(Producer, i));
+//	}
+//
+////	printf("\nConsumer IO 1 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 1: %d\n", PCBGetIO1Trap(Consumer, i));
+////	}
+////	printf("\nConsumer IO 2 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 2: %d\n", PCBGetIO2Trap(Consumer, i));
+////	}
+//}
 
 ////test pcb
 //int main(void) {
