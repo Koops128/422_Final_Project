@@ -204,12 +204,11 @@ void scheduler(int interruptType) {
 		}
 		break;
 	case IO_COMPLETION :
-		if (currProcess) {
+		if (currProcess != idleProcess) {
 			PCBSetState(currProcess, running);
 		} else {
-			dispatcher(); // executed when no processes are running,
-						  // because they had all been waiting for IO.
-		}
+		   dispatcher(); // executed when no processes are running,
+		}        		 // because they had all been waiting for IO.
 		break;
 	case BLOCKED_BY_LOCK :
 		if (currProcess) {
