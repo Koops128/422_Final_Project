@@ -291,6 +291,11 @@ RelationshipType PCBgetPairType(PcbStr* pcb) {
 /*                          	 I/O Related			                         */
 /*********************************************************************************/
 
+int PCBIsComputeIntensive(PcbPtr pcb)
+{
+    return PCBGetPriority(pcb) == 0;
+}
+
 //TODO merge into one method with a choice.
 unsigned int PCBGetIO1Trap(PcbStr* pcb, int index) {
 	if (pcb) {
