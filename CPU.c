@@ -277,7 +277,8 @@ void genMutualResourceUsers() {
 
 	int i;
 	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
-		int priority = ensureFreq();
+		int priority = 0;
+		while(priority == 0) {priority = ensureFreq();}
 		PcbPtr Ai = PCBAllocateSpace();
 		PcbPtr Bi = PCBAllocateSpace();
 		PCBConstructor(Ai, mutrecA, Bi);
@@ -639,7 +640,7 @@ void printIfInCriticalSection() {
 
 void cpu() {
 	//TODO comment back in when done testing mut rec
-	//genProcesses();
+	genProcesses();
 	genMutualResourceUsers();
 
 	printf("\nBegin Simulation:\n\n");
@@ -649,7 +650,11 @@ void cpu() {
 	while (simCounter <= SIMULATION_END) {
 
 		checkTimerInterrupt();
-		checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
+		}
+		
 
 		/******************************************
 		 *		Checking for Termination
@@ -664,8 +669,11 @@ void cpu() {
 		/** Now that we know the current process is not at the end,
 		 * we can safely increment the sys stack pc.  **/
 		sysStackPC++;
-
-		checkIOTraps();
+		
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			checkIOTraps();
+		}
 
 		//TODO delete this when done debugging.
 		if (currProcess) {
@@ -675,7 +683,9 @@ void cpu() {
 		/******************************************
 		 *		Checking Mutual Resource User
 		 ******************************************/
-		if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
+		if(!PCBIsComputeIntensive(currProcess))
+		{
+			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
 			if (!notBlockedByLock()) {
 				//TODO make an isr for this
 				scheduler(BLOCKED_BY_LOCK);
@@ -691,8 +701,8 @@ void cpu() {
 
 			printIfInCriticalSection();
 
-		}
-
+			}
+		} 
 
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
