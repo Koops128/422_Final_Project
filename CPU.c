@@ -5,7 +5,7 @@
 #include "Fifo.h"
 #include "PriorityQueue.h"
 #include "Mutex.h"
-
+#include "CondVar.h"
 
 //typedef enum interruptType {
 //	TIMER, TERMINATE, IO_REQUEST, IO_COMPLETION, LOCK_BLOCK, LOCK_UNBLOCK
@@ -19,12 +19,13 @@
 #define LOCK_UNBLOCK 		6
 
 #define NUM_MUT_REC_PAIRS 1//5			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_MUTEXES		  NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
+#define NUM_PRO_CON_PAIRS	1
+#define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 
 #define NEW_PROCS		6				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	10000//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
@@ -45,6 +46,7 @@ unsigned int currQuantum;
 PcbPtr currProcess;
 
 MutexPtr mutexes[NUM_MUTEXES];
+CondVarPtr condVars[NUM_PRO_CON_PAIRS * 2];
 
 /**		Queues		**/
 FifoQueue* newProcesses;
@@ -326,6 +328,52 @@ void genMutualResourceUsers() {
 
 }
 
+void genProducerConsumerPairs() {
+	PcbPtr Producer;
+	PcbPtr Consumer;
+	int i;
+	int addMutex = NUM_MUT_REC_PAIRS * 2;
+
+	for (i = 0; i < NUM_PRO_CON_PAIRS; i++) {
+		Producer = PCBAllocateSpace();
+		Consumer = PCBAllocateSpace();
+
+		mutexes[addMutex] = MutexConstructor(addMutex);
+		int condVarID1 = 2 * i;
+		int condVarID2 = (2 * i) + 1;
+		condVars[condVarID1] = CondVarConstructor(condVarID1);
+		condVars[condVarID2] = CondVarConstructor(condVarID2);
+		cQPtr buffer = makeCQ(PC_BUFFER_SIZE);
+		int priority = ensureFreq();
+
+		PCBConstructor(Producer, producer, Consumer);
+		currPID++;
+		PCBSetID(Producer, currPID);
+		PCBSetPriority(Producer, priority);
+		PCBProdConsSetMutex(Producer, addMutex);
+		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Producer, buffer);
+		initializeTrapArray(Producer);
+		fifoQueueEnqueue(newProcesses, Producer);
+		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+
+		PCBConstructor(Consumer, consumer, Producer);
+		currPID++;
+		PCBSetID(Consumer, currPID);
+		PCBSetPriority(Consumer, priority);
+		PCBProdConsSetMutex(Consumer, addMutex);
+		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Consumer, buffer);
+		initializeTrapArray(Consumer);
+		fifoQueueEnqueue(newProcesses, Consumer);
+		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+
+		addMutex++;
+
+	}
+
+}
+
 /*Saves the state of the CPU to the currently running PCB.*/
 void saveCpuToPcb() {
 	PCBSetPC(currProcess, sysStackPC);
@@ -533,7 +581,7 @@ PcbPtr isLocked(PcbPtr owner) {
 	int i, j;
 	for (i = 0; i < NUM_MUTEXES; i++) {
 		MutexPtr m = mutexes[i];
-		if (m->owner != NULL && MutexHasWaiting(m)) {
+		if (m && m->owner != NULL && MutexHasWaiting(m)) {
 			for (j = 0; j < m->waitQ->size; j++) {
 				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
 					return m->owner;
@@ -570,7 +618,7 @@ int checkLock(PcbPtr owner) {
 int deadlockDetect() {
 	int i, f, r = 0;
 	for (i = 0; i < NUM_MUTEXES; i++) {
-		if (mutexes[i]->owner != NULL) {
+		if (mutexes[i] && mutexes[i]->owner != NULL) {
 			f = checkLock(mutexes[i]->owner);
 			if (f == 1) {
 				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
@@ -642,77 +690,78 @@ void cpu() {
 	//TODO comment back in when done testing mut rec
 	genProcesses();
 	genMutualResourceUsers();
+	genProducerConsumerPairs();
 
 	printf("\nBegin Simulation:\n\n");
 
 	int simCounter = 0;
 
-	while (simCounter <= SIMULATION_END) {
-
-		checkTimerInterrupt();
-		if(!PCBIsComputeIntensive(currProcess))
-		{
-			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
-		}
-		
-
-		/******************************************
-		 *		Checking for Termination
-		 ******************************************/
-		/* Before we increment the SysStack, we need to know if the process is at its max PC (so we don't go beyond it). */
-		if(checkTermCountAndTermination()){
-			continue;
-			/*We have just loaded a new process; If we did rest of iteration, we might risk
-			executing lines of this process, without first checking if it's at its max pc.*/
-		}
-
-		/** Now that we know the current process is not at the end,
-		 * we can safely increment the sys stack pc.  **/
-		sysStackPC++;
-		
-		if(!PCBIsComputeIntensive(currProcess))
-		{
-			checkIOTraps();
-		}
-
-		//TODO delete this when done debugging.
-		if (currProcess) {
-			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
-		}
-
-		/******************************************
-		 *		Checking Mutual Resource User
-		 ******************************************/
-		if(!PCBIsComputeIntensive(currProcess))
-		{
-			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
-			if (!notBlockedByLock()) {
-				//TODO make an isr for this
-				scheduler(BLOCKED_BY_LOCK);
-				simCounter++;
-				continue;
-			} else {
-				PcbPtr wasWaitingPcb = checkUnlock();
-				if (wasWaitingPcb) {
-					//TODO make an isr for this
-					pqEnqueue(readyProcesses, wasWaitingPcb);
-				}
-			}
-
-			printIfInCriticalSection();
-
-			}
-		} 
-
-		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
-			if (deadlockDetect()) {
-				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
-			}
-		}
-
-		//at end
-		simCounter++;
-	}
+//	while (simCounter <= SIMULATION_END) {
+//
+////		checkTimerInterrupt();
+////		if(!PCBIsComputeIntensive(currProcess))
+////		{
+////			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
+////		}
+//
+//
+//		/******************************************
+//		 *		Checking for Termination
+//		 ******************************************/
+//		/* Before we increment the SysStack, we need to know if the process is at its max PC (so we don't go beyond it). */
+////		if(checkTermCountAndTermination()){
+////			continue;
+////			/*We have just loaded a new process; If we did rest of iteration, we might risk
+////			executing lines of this process, without first checking if it's at its max pc.*/
+////		}
+//
+//		/** Now that we know the current process is not at the end,
+//		 * we can safely increment the sys stack pc.  **/
+//		sysStackPC++;
+//
+////		if(!PCBIsComputeIntensive(currProcess))
+////		{
+////			checkIOTraps();
+////		}
+//
+//		//TODO delete this when done debugging.
+//		if (currProcess) {
+//			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
+//		}
+//
+//		/******************************************
+//		 *		Checking Mutual Resource User
+//		 ******************************************/
+////		if(!PCBIsComputeIntensive(currProcess))
+////		{
+////			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
+////			if (!notBlockedByLock()) {
+////				//TODO make an isr for this
+////				scheduler(BLOCKED_BY_LOCK);
+////				simCounter++;
+////				continue;
+////			} else {
+////				PcbPtr wasWaitingPcb = checkUnlock();
+////				if (wasWaitingPcb) {
+////					//TODO make an isr for this
+////					pqEnqueue(readyProcesses, wasWaitingPcb);
+////				}
+////			}
+////
+////			printIfInCriticalSection();
+////
+////			}
+////		}
+//
+////		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+////			if (deadlockDetect()) {
+////				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+////			}
+////		}
+//
+//		//at end
+//		simCounter++;
+//	}
 }
 
 int main(void) {
@@ -722,7 +771,7 @@ int main(void) {
 	sysStackPC = 0;
 	timerCount = TIMER_QUANTUM;
 	currQuantum = 0;
-	
+
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = pqConstructor();
 	terminatedProcesses = fifoQueueConstructor();
@@ -743,7 +792,7 @@ int main(void) {
 		cpu();
 	}
 
-	//free all the things!
+//	free all the things!
 	fifoQueueDestructor(&newProcesses);
 	pqDestructor(readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
