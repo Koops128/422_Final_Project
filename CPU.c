@@ -34,6 +34,7 @@
 #define NEW_PROCS		6
 #define PC_PROCS	1
 #define MR_PROCS	1
+//#define PRIORITY_LEVELS 16
 #define ROUNDS_TO_PRINT 4 // the number of rounds to wait before printing simulation data
 #define SIMULATION_END 100000 //the number of instructions to execute before the simulation may end
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
@@ -42,6 +43,11 @@
 #define LOCK_UNBLOCK
 #define NUM_MUT_REC_PAIRS 1//5
 #define NUM_MUTEXES		  NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
+
+#define P0_FREQ 5				// frequency (as a percentage) of priority 0 processes
+#define P1_FREQ P0_FREQ + 80
+#define P2_FREQ P1_FREQ + 10
+#define P3_FREQ P2_FREQ + 5
 
 //Global variables
 int currPID; //The number of processes created so far. The latest process has this as its ID.
@@ -55,8 +61,8 @@ FifoQueue* terminatedProcesses;
 PcbPtr currProcess;
 Device* device1;
 Device* device2;
-MutexPtr mutexes[sizeof(MutexStr) * (PC_PROCS + MR_PROCS * 2)];
-CondVarPtr condVars[sizeof(CondVarStr) * PC_PROCS * 2];
+MutexPtr mutexes[(PC_PROCS + MR_PROCS * 2)];
+CondVarPtr condVars[PC_PROCS * 2];
 
 typedef enum {
 	lockTrap=0,
@@ -72,10 +78,14 @@ void dispatcher() {
 	if (currProcess) {
 		PCBSetState(currProcess, running);
 		sysStackPC = PCBGetPC(currProcess);
-
-		printf("PID %d was dispatched\r\n\r\n", PCBGetID(currProcess));
+		PCBSetLastQuantum(currProcess, currQuantum);
+		if (PCBGetStarveBoostFlag(currProcess)) {
+			PCBSetStarveBoostFlag(currProcess, 0);
+			PCBSetPriority(currProcess, PCBGetPriority(currProcess) + 1);
+		}
+		printf("PID %d was dispatched\n\n", PCBGetID(currProcess));
 	} else {
-		printf("Ready queue is empty, no process dispatched\r\n\r\n");
+		printf("Ready queue is empty, no process dispatched\n\n");
 	}
 }
 
@@ -141,10 +151,12 @@ void scheduler(int interruptType) {
 		PCBSetState(pcb, ready);
 		pqEnqueue(readyProcesses, pcb);
 	}
+	//TODO do we want this here?
+	runStarvationDetector();
 
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
-		if (currProcess/*PCBGetState(currProcess) != blocked && PCBGetState(currProcess) != terminated*/) {
+		if (currProcess) {
 			pqEnqueue(readyProcesses, currProcess);
 			PCBSetState(currProcess, ready);
 		}
@@ -239,14 +251,12 @@ void IO_ISR(int numIO) {	//IOCompletionHandler
 			setIOTimer(device2);
 		}
 	}
+
 	pqEnqueue(readyProcesses, pcb);
 	PCBSetState(pcb, ready);
 
 	printf("PID %d put in ready queue\r\n\r\n", PCBGetID(pcb));
-
-	//PCBSetState(currProcess, ready);
-	//set new io waiting queue process to running
-	//currProcess = pcb;
+//
 	scheduler(IO_COMPLETION);
 }
 
@@ -270,6 +280,7 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 	PCBSetState(currProcess, blocked);
 	int contextSwitch = 0; //0 for no context switch, 1 for context switch
 
+	PcbPtr notWaitingAnymore = NULL;
 	switch(trapRequest) {
 		case lockTrap :
 			//if lock, then call the pair's mutex for a lock.  If it needs to wait for the lock,
@@ -277,31 +288,57 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			if(!MutexLock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess)) {
 				scheduler(PRO_CON_INTERRUPT);
 				contextSwitch = 1;
-			}
+			} //else {
+				//PCBSetState(currProcess, running);
+			//}
 			break;
 		case unlockTrap :
 			//if unlock, then call the pair's mutex to unlock
 			MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
-			PCBSetState(currProcess, ready);
+			//PCBSetState(currProcess, running);
 			break;
 		case signalTrap :
 			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
-			//returned = ProConSignal(currProcess); //CondVarSignal(CondVarPtr var, PcbPtr pcb)
-//			if (returned) {
-//				pqEnqueue(readyProcesses, returned);
-//			}
-			PCBSetState(currProcess, ready);
+
+			//if producer call produce method, else call consumer method, then call signal
+			if (PCBGetRelationship(currProcess)->mType == producer) {
+				ProdConsProduce(currProcess);
+				notWaitingAnymore = CondVarSignal(condVars[PCBProdConsGetBufNotEmpty(currProcess)], currProcess);
+			} else {
+				ProdConsConsume(currProcess);
+				notWaitingAnymore = CondVarSignal(condVars[PCBProdConsGetBufNotFull(currProcess)], currProcess);
+			}
+
+			if (notWaitingAnymore) {
+				pqEnqueue(readyProcesses, notWaitingAnymore);
+				PCBSetState(notWaitingAnymore, ready);
+			}
+
+			//PCBSetState(currProcess, running);
 			break;
 		case waitTrap :
 			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
 
-//			if (ProConWait(currProcess)) { //CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb);
-//				scheduler(PRO_CON_INTERRUPT);
-//				contextSwitch = 1;
-//			}
+			if (PCBGetRelationship(currProcess)->mType == producer
+					&& bufFull(PCBProdConsGetBuffer(currProcess))) {
+				CondVarWait(condVars[PCBProdConsGetBufNotFull(currProcess)],
+						    mutexes[PCBProdConsGetMutex(currProcess)],
+						    currProcess);
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			} else if (PCBProdConsGetBuffer(currProcess)){
+				CondVarWait(condVars[PCBProdConsGetBufNotEmpty(currProcess)],
+										    mutexes[PCBProdConsGetMutex(currProcess)],
+										    currProcess);
+				scheduler(PRO_CON_INTERRUPT);
+				contextSwitch = 1;
+			}
 			break;
 		default:
 			break;
+	}
+	if (!contextSwitch) {
+		PCBSetState(currProcess, running);
 	}
 	return contextSwitch;
 }
@@ -481,6 +518,31 @@ void printIfInCriticalSection() {
 	}
 }
 
+/**
+ * Ensures that priority levels only occur a certain percentage of the time.
+ * Returns the priority level based on desired frequency (defined at the top of this file).
+ */
+int ensureFreq()
+{
+	int randNum = (rand() % 100) + 1;
+	if(randNum <= P0_FREQ)
+	{
+		return 0;
+	}
+	else if(randNum <= P1_FREQ)
+	{
+		return 1;
+	}
+	else if(randNum <= P2_FREQ)
+	{
+		return 2;
+	}
+	else
+	{
+		return 3;
+	}
+}
+
 /*Randomly generates between 0 and 5 new processes and enqueues them to the New Processes Queue.*/
 void genProcesses() {
 	PcbPtr newProc;
@@ -494,7 +556,7 @@ void genProcesses() {
 		{
 			currPID++;
 			PCBSetID(newProc, currPID);
-			PCBSetPriority(newProc, rand() % PRIORITY_LEVELS);
+			PCBSetPriority(newProc, ensureFreq());
 			fifoQueueEnqueue(newProcesses, newProc);
 
 			printf("Process created: PID: %d at %lu\r\n", PCBGetID(newProc), PCBGetCreation(newProc));
@@ -521,7 +583,7 @@ void genMutualResourceUsers() {
 
 	int i;
 	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
-		int priority = rand() % PRIORITY_LEVELS;
+		int priority = ensureFreq();
 		PcbPtr Ai = PCBAllocateSpace();
 		PcbPtr Bi = PCBAllocateSpace();
 		PCBConstructor(Ai, mutrecA, Bi);
@@ -572,32 +634,48 @@ void genProducerConsumerPairs() {
 	PcbPtr Producer;
 	PcbPtr Consumer;
 	int i;
+	int addMutex = NUM_MUT_REC_PAIRS * 2;
 
-	//TODO create and add mutexes and condition variables for these pcbs.
 	for (i = 0; i < PC_PROCS; i++) {
-		Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
-		Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+		Producer = PCBAllocateSpace();
+		Consumer = PCBAllocateSpace();
+
+		mutexes[addMutex] = MutexConstructor(addMutex);
+		int condVarID1 = 2 * i;
+		int condVarID2 = (2 * i) + 1;
+		condVars[condVarID1] = CondVarConstructor(condVarID1);
+		condVars[condVarID2] = CondVarConstructor(condVarID2);
+		cQPtr buffer = makeCQ(PC_BUFFER_SIZE);
+		int priority = ensureFreq();
 
 		PCBConstructor(Producer, producer, Consumer);
 		currPID++;
 		PCBSetID(Producer, currPID);
-		PCBSetPriority(Producer, rand() % PRIORITY_LEVELS);
+		PCBSetPriority(Producer, priority);
+		PCBProdConsSetMutex(Producer, addMutex);
+		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Producer, buffer);
 		fifoQueueEnqueue(newProcesses, Producer);
 		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
 
 		PCBConstructor(Consumer, consumer, Producer);
 		currPID++;
 		PCBSetID(Consumer, currPID);
-		PCBSetPriority(Consumer, rand() % PRIORITY_LEVELS);
+		PCBSetPriority(Consumer, priority);
+		PCBProdConsSetMutex(Consumer, addMutex);
+		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
+		PCBProdConsSetBuffer(Consumer, buffer);
 		fifoQueueEnqueue(newProcesses, Consumer);
 		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+
+		addMutex++;
 	}
 
 }
 
 void checkTimerInterrupt() {
 	if (timerCheck() == 1) {
-		genProcesses();
+//		genProcesses();
 		if (currProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
@@ -616,7 +694,7 @@ void checkIOInterrupts() {
 		} else {
 			printf("I/O 1 Completion interrupt: no current process is running, ");
 		}
-		//call the IO service routine
+//		//call the IO service routine
 		IO_ISR(1);
 	}
 
@@ -626,7 +704,7 @@ void checkIOInterrupts() {
 		} else {
 			printf("I/O 1 Completion interrupt: no current process is running.");
 		}
-		//call the IO service routine
+//		//call the IO service routine
 		IO_ISR(2);
 	}
 }
@@ -696,8 +774,8 @@ int checkMRTraps() {
 
 void cpu() {
 	genProcesses();
-	genProducerConsumerPairs();
 	genMutualResourceUsers();
+	genProducerConsumerPairs();
 
 		printf("\r\nBegin Simulation:\r\n\r\n");
 
@@ -722,26 +800,28 @@ void cpu() {
 			if (checkIOTraps()) {
 				continue;
 			}
-			RelationshipPtr relationship = PCBGetRelationship(currProcess);
-			if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
-				continue;
-			} else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
-				continue;
-			}
-		}
+
+
+//			RelationshipPtr relationship = PCBGetRelationship(currProcess);
+//			if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
+//				continue;
+//			} else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
+//				continue;
+//			}
 
 /****Checking for deadlock****/
-		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
-			if (deadlockDetect()) {
-				printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
-			}
-		}
+//			if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
+//				if (deadlockDetect()) {
+//					printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+//				}
+//			}
 
 /****Checking for starvation****/
-		//TODO
+			//TODO
 
-		//at end
-		simCounter++;
+			//at end
+			simCounter++;
+		}
 }
 
 int main(void) {
@@ -763,7 +843,7 @@ int main(void) {
 	if(currProcess != NULL)	// Remember to call the destructor when finished using newProc
 	{
 		PCBSetID(currProcess, currPID);
-		PCBSetPriority(currProcess, rand() % PRIORITY_LEVELS);
+		PCBSetPriority(currProcess, ensureFreq());
 		PCBSetState(currProcess, running);
 		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
 		cpu();
