@@ -332,27 +332,28 @@ void genProducerConsumerPairs() {
 	PcbPtr Producer;
 	PcbPtr Consumer;
 	int i;
-	int addMutex = NUM_MUT_REC_PAIRS * 2;
+	//int addMutex = NUM_MUT_REC_PAIRS * 2;
 
 	for (i = 0; i < NUM_PRO_CON_PAIRS; i++) {
 		Producer = PCBAllocateSpace();
 		Consumer = PCBAllocateSpace();
 
-		mutexes[addMutex] = MutexConstructor(addMutex);
-		int condVarID1 = 2 * i;
-		int condVarID2 = (2 * i) + 1;
-		condVars[condVarID1] = CondVarConstructor(condVarID1);
-		condVars[condVarID2] = CondVarConstructor(condVarID2);
-		cQPtr buffer = makeCQ(PC_BUFFER_SIZE);
+//		mutexes[addMutex] = MutexConstructor(addMutex);
+//		int condVarID1 = 2 * i;
+//		int condVarID2 = (2 * i) + 1;
+//		condVars[condVarID1] = CondVarConstructor(condVarID1);
+//		condVars[condVarID2] = CondVarConstructor(condVarID2);
+//		cQPtr buffer = makeCQ(PC_BUFFER_SIZE);
 		int priority = ensureFreq();
 
 		PCBConstructor(Producer, producer, Consumer);
 		currPID++;
 		PCBSetID(Producer, currPID);
 		PCBSetPriority(Producer, priority);
-		PCBProdConsSetMutex(Producer, addMutex);
-		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
-		PCBProdConsSetBuffer(Producer, buffer);
+//		PCBProdConsSetMutex(Producer, addMutex);
+//		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
+//		PCBProdConsSetBuffer(Producer, buffer);
+		initializeTrapArray(Producer);
 		fifoQueueEnqueue(newProcesses, Producer);
 		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
 
@@ -360,13 +361,14 @@ void genProducerConsumerPairs() {
 		currPID++;
 		PCBSetID(Consumer, currPID);
 		PCBSetPriority(Consumer, priority);
-		PCBProdConsSetMutex(Consumer, addMutex);
-		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
-		PCBProdConsSetBuffer(Consumer, buffer);
+//		PCBProdConsSetMutex(Consumer, addMutex);
+//		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
+//		PCBProdConsSetBuffer(Consumer, buffer);
+		initializeTrapArray(Consumer);
 		fifoQueueEnqueue(newProcesses, Consumer);
 		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
 
-		addMutex++;
+//		addMutex++;
 
 		fifoQueueEnqueue(newProcesses, Producer);
 		fifoQueueEnqueue(newProcesses, Consumer);
@@ -581,7 +583,7 @@ PcbPtr isLocked(PcbPtr owner) {
 	int i, j;
 	for (i = 0; i < NUM_MUTEXES; i++) {
 		MutexPtr m = mutexes[i];
-		if (m->owner != NULL && MutexHasWaiting(m)) {
+		if (m && m->owner != NULL && MutexHasWaiting(m)) {
 			for (j = 0; j < m->waitQ->size; j++) {
 				if (fifoQueueContains(m->waitQ, owner) != -1) { //being locked, return mutex owner
 					return m->owner;
@@ -618,7 +620,7 @@ int checkLock(PcbPtr owner) {
 int deadlockDetect() {
 	int i, f, r = 0;
 	for (i = 0; i < NUM_MUTEXES; i++) {
-		if (mutexes[i]->owner != NULL) {
+		if (mutexes[i] && mutexes[i]->owner != NULL) {
 			f = checkLock(mutexes[i]->owner);
 			if (f == 1) {
 				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
@@ -690,6 +692,7 @@ void cpu() {
 	//TODO comment back in when done testing mut rec
 	genProcesses();
 	genMutualResourceUsers();
+	genProducerConsumerPairs();
 
 	printf("\nBegin Simulation:\n\n");
 
