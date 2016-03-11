@@ -675,7 +675,7 @@ void genProducerConsumerPairs() {
 
 void checkTimerInterrupt() {
 	if (timerCheck() == 1) {
-//		genProcesses();
+		genProcesses();
 		if (currProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
@@ -801,13 +801,14 @@ void cpu() {
 				continue;
 			}
 
-
-//			RelationshipPtr relationship = PCBGetRelationship(currProcess);
-//			if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
-//				continue;
-//			} else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
-//				continue;
-//			}
+			if (currProcess) {
+				RelationshipPtr relationship = PCBGetRelationship(currProcess);
+				if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
+					continue;
+				} //else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
+					//continue;
+				//}
+			}
 
 /****Checking for deadlock****/
 //			if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
@@ -815,9 +816,6 @@ void cpu() {
 //					printf(">>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
 //				}
 //			}
-
-/****Checking for starvation****/
-			//TODO
 
 			//at end
 			simCounter++;
