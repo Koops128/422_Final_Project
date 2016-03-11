@@ -181,10 +181,8 @@ void scheduler(int interruptType) {
 
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
-		if (currProcess) {
-		    if (currProcess != idleProcess) {
-		        pqEnqueue(readyProcesses, currProcess);
-		    }
+		if (currProcess != idleProcess) {
+		    pqEnqueue(readyProcesses, currProcess);
 		    PCBSetState(currProcess, ready);
 		}
 		dispatcher();
@@ -199,9 +197,9 @@ void scheduler(int interruptType) {
 		dispatcher();
 		break;
 	case IO_REQUEST :
-		if (currProcess) {
+		//if (currProcess) {//TODO do we need this check here?
 			dispatcher();
-		}
+		//}
 		break;
 	case IO_COMPLETION :
 		if (currProcess != idleProcess) {
@@ -211,15 +209,15 @@ void scheduler(int interruptType) {
 		}        		 // because they had all been waiting for IO.
 		break;
 	case BLOCKED_BY_LOCK :
-		if (currProcess) {
+		//if (currProcess != idleProcess) {//TODO don't think we need this here
 			PCBSetPC(currProcess, sysStackPC); //save it's pc, but don't put in ready queue; the mutex wait queue is holding it.
 			dispatcher();
-		}
+		//}
 		break;
 	case PRO_CON_INTERRUPT :
-		if (currProcess) {
+		//if (currProcess != idleProcess) {//TODO do we need this here?
 			dispatcher();
-		}
+		//}
 		break;
 	default :
 		break;
@@ -449,7 +447,7 @@ int setIOTimer(Device* device) {
 
 /*The interrupt service routine for a timer interrupt.*/
 void timerIsr() {
-	if (currProcess) {
+	if (currProcess != idleProcess) {
 		saveCpuToPcb();
 		PCBSetState(currProcess, interrupted);
 	}
@@ -473,10 +471,10 @@ void checkTimerInterrupt() {
 		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
 		//TODO comment back in (commented out for simplicity to see how stuff works)
 		genProcesses();
-		if (currProcess) {
+		if (currProcess != idleProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
-			printf("Timer interrupt: no current process is running, ");
+			printf("Timer interrupt: idle process is running, ");
 		}
 		timerIsr();
 	}
@@ -487,7 +485,7 @@ void checkTimerInterrupt() {
  *=================================================*/
 
 void IO_ISR(int numIO) { //IOCompletionHandler
-	if (currProcess) {
+	if (currProcess != idleProcess) {
 		saveCpuToPcb();
 		PCBSetState(currProcess, interrupted);
 	}
@@ -529,22 +527,22 @@ int checkIOInterrupt(Device* device) {
 
 void checkIOInterrupts() {
 	if (checkIOInterrupt(device1) == 1) {
-		if (currProcess) {
+		if (currProcess != idleProcess) {
 			printf("I/O 1 Completion interrupt: PID %d is running, ",
 					PCBGetID(currProcess));
 		} else {
-			printf("I/O 1 Completion interrupt: no current process is running, ");
+			printf("I/O 1 Completion interrupt: idle process is running, ");
 		}
 		IO_ISR(1);
 	}
 
 	if (checkIOInterrupt(device2) == 1) {
-		if (currProcess) {
+		if (currProcess != idleProcess) {
 			printf("I/O 1 Completion interrupt: PID %d is running, ",
 					PCBGetID(currProcess));
 		} else {
 			printf(
-					"I/O 1 Completion interrupt: no current process is running.");
+					"I/O 1 Completion interrupt: idle process is running.");
 		}
 		IO_ISR(2);
 	}
@@ -574,7 +572,7 @@ void IOTrapHandler(Device* d) {
 int checkIORequest(int devnum) {
 	int requestMade = 0;
 	int i;
-	if (currProcess) {
+	if (currProcess != idleProcess) {
 		if (devnum == 1) { //look through array 1
 			for (i=0; i < NUM_IO_TRAPS; i++) {
 				requestMade = PCBGetIO1Trap(currProcess, i) == sysStackPC ? 1: requestMade;
@@ -605,7 +603,7 @@ ProdConsTrapType checkProdConsRequest() {
 	PCStepsPtr pcSteps = PCBGetPCSteps(currProcess);
 
 	int i;
-	if (currProcess) {
+	if (currProcess != idleProcess) {
 		for (i = 0; i < PC_LOCK_UNLOCK; i++) {
 			if (pcSteps->lock[i] == sysStackPC)
 				return lockTrap;
@@ -846,7 +844,7 @@ void cpu() {
 		}
 
 		//TODO delete this when done debugging.
-		if (currProcess) {
+		if (currProcess != idleProcess) {
 			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
 		}
 
