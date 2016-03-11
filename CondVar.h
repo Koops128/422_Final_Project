@@ -44,6 +44,6 @@ void CondVarDestructor(CondVarPtr* condVarPtrPtr);
 /*********************************************************************************/
 
 void CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb);
-void CondVarSignal(CondVarPtr var, PcbPtr pcb);
+PcbPtr CondVarSignal(CondVarPtr var, PcbPtr pcb);
 
 #endif
