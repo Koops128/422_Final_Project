@@ -811,9 +811,9 @@ void cpu() {
 
 			if (currProcess) {
 				RelationshipPtr relationship = PCBGetRelationship(currProcess);
-				if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
-					continue;
-				} //else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
+				//if ((relationship->mType == producer || relationship->mType == consumer) && checkPCTraps()) {
+				//	continue;
+				//} //else if ((relationship->mType == mutrecA || relationship->mType == mutrecB) && checkMRTraps()) {
 					//continue;
 				//}
 			}
