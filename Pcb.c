@@ -569,5 +569,61 @@ void ProdConsProduce(PcbPtr Producer) {
 void ProdConsConsume(PcbPtr Consumer) {
 	int* popped = 0;
 	popCQ(Consumer->PairDataStr.ProConData->buffer, popped);
-	printf("Consumer PID %d consumed value %d", Consumer->PID, popped);
+	printf("Consumer PID %d consumed value %d", Consumer->PID, *popped);
 }
+
+//int main(void) {
+//	srand(time(NULL));
+//
+//	PcbPtr Producer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//	PcbPtr Consumer = PCBAllocateSpace();//(PcbPtr) malloc(sizeof(PcbStr));
+//
+//	PCBConstructor(Producer, producer, Consumer);
+//	PCBSetID(Producer, 1);
+//	PCBSetPriority(Producer, rand() % 16);
+//	printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+//
+//	PCBConstructor(Consumer, consumer, Producer);
+//	PCBSetID(Consumer, 2);
+//	PCBSetPriority(Consumer, rand() % 16);
+//	printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+//
+//	int i;
+//	printf("\nProducer steps\n");
+//	PCStepsPtr pcSteps = PCBGetPCSteps(Producer);
+//	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+//		printf("Lock: %d\n", pcSteps->lock[i]);
+//		printf("Wait: %d\n", pcSteps->wait[0]);
+//		printf("Signal: %d\n", pcSteps->signal[0]);
+//		printf("Unlock: %d\n", pcSteps->unlock[i]);
+//	}
+//
+////	printf("\nConsumer steps\n");
+////	pcSteps = PCBGetPCSteps(Consumer);
+////	for (i = 0; i < PC_LOCK_UNLOCK; i++) {
+////		printf("Lock: %d\n", pcSteps->lock[i]);
+////		printf("Wait: %d\n", pcSteps->wait[0]);
+////		printf("Signal: %d\n", pcSteps->signal[0]);
+////		printf("Unlock: %d\n", pcSteps->unlock[i]);
+////	}
+//
+//	printf("\nProducer IO 1 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 1: %d\n", PCBGetIO1Trap(Producer, i));
+//	}
+//	printf("\nProducer IO 2 steps\n");
+//	for (i = 0; i < NUM_IO_TRAPS; i++) {
+//		printf("IO 2: %d\n", PCBGetIO2Trap(Producer, i));
+//	}
+//
+////	printf("\nConsumer IO 1 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 1: %d\n", PCBGetIO1Trap(Consumer, i));
+////	}
+////	printf("\nConsumer IO 2 steps\n");
+////	for (i = 0; i < NUM_IO_TRAPS; i++) {
+////		printf("IO 2: %d\n", PCBGetIO2Trap(Consumer, i));
+////	}
+//}
+
+
