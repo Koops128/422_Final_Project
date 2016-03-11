@@ -563,19 +563,24 @@ int checkLock(PcbPtr owner) {
 /**
  * Returns 1 if true 0 otherwise
  */
+/**
+ * Returns 1 if true 0 otherwise
+ */
 int deadlockDetect() {
-	int i, r;
+	int i, f, r = 0;
 	for (i = 0; i < NUM_MUTEXES; i++) {
 		if (mutexes[i]->owner != NULL) {
-			r = checkLock(mutexes[i]->owner);
-			if (r == 1) {
+			f = checkLock(mutexes[i]->owner);
+			if (f == 1) {
 				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
-				return 1;
+				r = 1;
 			}
 		}
 	}
-	printf("\r\nno deadlock detected\r\n");
-	return 0;
+	if (!r) {
+		printf("\r\nno deadlock detected\r\n");
+	}
+	return r;
 }
 
 /*=================================================
