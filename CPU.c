@@ -182,8 +182,10 @@ void scheduler(int interruptType) {
 	switch (interruptType) {
 	case TIMER_INTERRUPT :
 		if (currProcess) {
-			pqEnqueue(readyProcesses, currProcess);
-			PCBSetState(currProcess, ready);
+		    if (currProcess != idleProcess) {
+		        pqEnqueue(readyProcesses, currProcess);
+		    }
+		    PCBSetState(currProcess, ready);
 		}
 		dispatcher();
 		break;
@@ -288,8 +290,6 @@ void genIdle() {
 		PCBSetPriority(idleProcess, ensureFreq());
 		PCBSetState(idleProcess, created);
 		PCBSetLastQuantum(idleProcess, currQuantum);
-		//fifoQueueEnqueue(newProcesses, newProc);
-		//printf("Process created: PID: %d, Priority %d at %lu\n", PCBGetID(newProc), PCBGetPriority(newProc), PCBGetCreation(newProc));
 	}
 }
 
@@ -821,7 +821,7 @@ void cpu() {
 	while (simCounter <= SIMULATION_END) {
 
 		checkTimerInterrupt();
-		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
+		if(!PCBIsComputeIntensive(currProcess))
 		{
 			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
 		}
