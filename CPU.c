@@ -45,6 +45,7 @@ int timerCount;
 unsigned int sysStackPC;
 unsigned int currQuantum;
 PcbPtr currProcess;
+PcbPtr idleProcess;
 
 MutexPtr mutexes[NUM_MUTEXES];
 CondVarPtr condVars[NUM_PRO_CON_PAIRS * 2];
@@ -100,7 +101,9 @@ void dispatcher() {
 		}
 		printf("PID %d was dispatched\n\n", PCBGetID(currProcess));
 	} else {
-		printf("Ready queue is empty, no process dispatched\n\n");
+		printf("Ready queue is empty, dispatching idle process\n\n");
+		currProcess = idleProcess;
+		PCBSetState(currProcess, running);
 	}
 }
 
@@ -273,6 +276,23 @@ void genProcesses() {
 	}
 }
 
+/**
+ * Generates the global idle process
+ * Will not terminate or have a partner
+ */
+void genIdle() {
+	idleProcess = PCBConstructor(PCBAllocateSpace(), none, NULL);
+	if(idleProcess != NULL)	{
+		currPID++;
+		PCBSetID(idleProcess, currPID);
+		PCBSetPriority(idleProcess, ensureFreq());
+		PCBSetState(idleProcess, created);
+		PCBSetLastQuantum(idleProcess, currQuantum);
+		//fifoQueueEnqueue(newProcesses, newProc);
+		//printf("Process created: PID: %d, Priority %d at %lu\n", PCBGetID(newProc), PCBGetPriority(newProc), PCBGetCreation(newProc));
+	}
+}
+
 /*Creates <NUM_MUT_REC_PAIRS> mutual resource user pairs and enqueues in new queue.*/
 void genMutualResourceUsers() {
 //	unsigned int lock1Steps[NUM_MUTEX_STEPS] = {20, 40, 60, 80}; //All the same, for simplicity sake and ease of analysis
@@ -407,7 +427,8 @@ int checkTermCountAndTermination() {
 		PCBSetTermCount(currProcess, PCBGetTermCount(currProcess) + 1);
 		printf("\r\n");
 		//if TERM_COUNT = TERMINATE, then call terminateISR to put this process in the terminated list
-		if (PCBGetTermCount(currProcess) == PCBGetTerminate(currProcess)) {
+		if (PCBGetTermCount(currProcess) == PCBGetTerminate(currProcess)
+				&& currProcess != idleProcess) {
 
 			terminateIsr();
 			return 1;	//currProcess has been terminated, we don't want to execute the rest of the loop, instead jump to next iteration
@@ -800,7 +821,7 @@ void cpu() {
 	while (simCounter <= SIMULATION_END) {
 
 		checkTimerInterrupt();
-		if(!PCBIsComputeIntensive(currProcess))
+		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
 		{
 			checkIOInterrupts(); /*Ok to do before checking for termination, since this does not advance us forward an instruction.*/
 		}
@@ -820,7 +841,7 @@ void cpu() {
 		 * we can safely increment the sys stack pc.  **/
 		sysStackPC++;
 
-		if(!PCBIsComputeIntensive(currProcess))
+		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
 		{
 			checkIOTraps();
 		}
@@ -833,7 +854,7 @@ void cpu() {
 		/******************************************
 		 *		Checking Mutual Resource User
 		 ******************************************/
-		if(!PCBIsComputeIntensive(currProcess))
+		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
 		{
 			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
 			if (!notBlockedByLock()) {
@@ -897,6 +918,7 @@ int main(void) {
 		PCBSetState(currProcess, running);
 		PCBSetLastQuantum(currProcess, currQuantum);
 		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
+		genIdle();
 		cpu();
 	}
 
