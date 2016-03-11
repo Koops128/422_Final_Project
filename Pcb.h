@@ -17,15 +17,18 @@
 #ifndef PCB_H_
 #define PCB_H_
 
+#include "CQ.h"
+
 //IO DEFINES
 #define NUM_IO_TRAPS 			4
-
+#define MAX_PC 2000
 
 //PRODUCER CONSUMER DEFINES
 #define PC_LOCK_UNLOCK 			2
 #define PC_WAIT 				1
 #define PC_SIGNAL 				1
 #define MAX_SHARED_SIZE 		5
+#define PC_BUFFER_SIZE 			10
 
 //SHARED RESOURCE DEFINES
 #define SR_LOCK_UNLOCK 			2
@@ -125,6 +128,18 @@ typedef struct PCData* PCDataPtr;
 
 RelationshipType PCBgetPairType(PcbPtr pcb);
 
+/*Producer Consumer methods*/
+PCStepsPtr PCBGetPCSteps(PcbPtr pcb);
+void PCBProdConsSetMutex(PcbPtr pcb, int mutex);
+int PCBProdConsGetMutex(PcbPtr pcb);
+void PCBProdConsSetCondVars(PcbPtr pcb, int bufNotFull, int bufNotEmpty);
+void PCBProdConsSetBuffer(PcbPtr pcb, cQPtr buffer);
+cQPtr PCBProdConsGetBuffer(PcbPtr pcb);
+void PCBProdConsSetShared(PcbPtr pcb, int sharedResource);
+int PCBProdConsGetBufNotFull(PcbPtr pcb);
+int PCBProdConsGetBufNotEmpty(PcbPtr pcb);
+int PCBProdConsGetShared(PcbPtr pcb);
+
 /*Contains the steps arrays specific to a mutual resource user
  *for locking/unlocking each of its two mutexes.*/
 typedef struct mutRecPairSteps {
@@ -160,15 +175,14 @@ typedef struct MRData{
 	 *first mutex this PCB tries to get a lock on.*/
 	int mutex1;
 	int mutex2;
-	//MutexPtr mutex1;
-	//MutexPtr mutex2;
 } MRDataStr;
 
 typedef struct PCData{
 	int mutex;
-	//MutexPtr mutex;
-	//condition var 1
-	//condition var 2
+	int bufNotFull;
+	int bufNotEmpty;
+	cQPtr buffer;
+	int sharedData;
 } PCDataStr;
 
 
