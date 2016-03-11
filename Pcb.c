@@ -211,9 +211,9 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner) {
 		pcb->ProConData = (PCDataPtr) malloc(sizeof(PCDataStr));
 		pcb->ProConData->sharedData = 0;
 
-//		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
-//				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
-//				pcb->IO_1_Traps, pcb->IO_2_Traps);
+////		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
+////				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
+////				pcb->IO_1_Traps, pcb->IO_2_Traps);
 	}
 
 	if (theType != mutrecA && theType != mutrecB && theType != producer && theType != consumer) {
@@ -377,6 +377,22 @@ void PCBProdConsSetShared(PcbPtr pcb, int sharedResource) {
 
 int PCBProdConsGetShared(PcbPtr pcb) {
 	return pcb->ProConData->sharedData;
+}
+
+PCDataPtr PCBGetPCData(PcbPtr pcb) {
+	return pcb->ProConData;
+}
+
+void ProdConsProduce(PcbPtr Producer) {
+	pushCQ(Producer->ProConData->buffer, Producer->ProConData->sharedData);
+	printf("Producer PID %d produced value %d", Producer->PID, Producer->ProConData->sharedData);
+	Producer->ProConData->sharedData++;
+}
+
+void ProdConsConsume(PcbPtr Consumer) {
+	int* popped = 0;
+	popCQ(Consumer->ProConData->buffer, popped);
+	printf("Consumer PID %d consumed value %d", Consumer->PID, *popped);
 }
 
 /*********************************************************************************/
