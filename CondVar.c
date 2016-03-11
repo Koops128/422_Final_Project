@@ -80,10 +80,10 @@ void CondVarWait(CondVarPtr var, MutexPtr mutex, PcbPtr pcb)
 //If the other process wasn't waiting, then return NULL
 PcbPtr CondVarSignal(CondVarPtr var, PcbPtr signaller)
 {
-	printSignal(PCBGetID(signaller), var->id);
 	PcbPtr toReturn = var->pcb;
 	//because the other process in the pair might not be waiting for the condVar when this pcb signals
 	if (var->pcb) {
+		printSignal(PCBGetID(signaller), var->id);
 		MutexLock(var->mutex, var->pcb);
 		var->pcb = NULL;
 		var->mutex = NULL;
