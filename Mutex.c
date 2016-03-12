@@ -109,8 +109,9 @@ int MutexLock(MutexPtr mutex, PcbPtr pcb)
 	}
 }
 
-void MutexUnlock(MutexPtr mutex, PcbPtr pcb)
+PcbPtr MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 {
+	PcbPtr toReturn;
 	if(hasOwner(mutex) && mutex->owner == pcb)
 	{
 
@@ -119,6 +120,7 @@ void MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 		{
 			printSuccessUnlockNextInLine(PCBGetID(pcb), mutex->id, PCBGetID(fifoQueuePeek(mutex->waitQ)));
 			mutex->owner = fifoQueueDequeue(mutex->waitQ);
+			toReturn = mutex->owner;
 		}
 		else
 		{
@@ -134,6 +136,8 @@ void MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 	{
 		printFailUnlockNoOwner(PCBGetID(pcb), mutex->id);
 	}
+
+	return toReturn;
 }
 
 int MutexHasWaiting(MutexPtr mutex)
