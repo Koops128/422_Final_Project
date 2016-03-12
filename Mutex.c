@@ -111,7 +111,7 @@ int MutexLock(MutexPtr mutex, PcbPtr pcb)
 
 PcbPtr MutexUnlock(MutexPtr mutex, PcbPtr pcb)
 {
-	PcbPtr toReturn;
+	PcbPtr toReturn = NULL;
 	if(hasOwner(mutex) && mutex->owner == pcb)
 	{
 
