@@ -21,7 +21,7 @@
 
 //IO DEFINES
 #define NUM_IO_TRAPS 			4
-#define MAX_PC 2000
+#define MAX_PC 200
 
 //PRODUCER CONSUMER DEFINES
 #define PC_LOCK_UNLOCK 			2
