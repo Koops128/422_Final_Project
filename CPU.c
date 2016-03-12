@@ -20,15 +20,15 @@
 #define PRO_CON_INTERRUPT	7
 
 #define NUM_MUT_REC_PAIRS 	10			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	1
+#define NUM_PRO_CON_PAIRS	0
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 //~ #define MAX_COMP_INTENS_PCBS 25
 //~ #define MAX_IO_PROCESSES 50
 
-#define NEW_PROCS		5				// max num new processes to make per quantum
+#define NEW_PROCS		2				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	100000//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	1//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
@@ -316,7 +316,7 @@ void genMutualResourceUsers() {
 	int i;
 	for (i = 0; i < NUM_MUT_REC_PAIRS; i++) {
 		int priority = 0;
-		while(priority == 0) {priority = ensureFreq();}
+		//while(priority == 0) {priority = ensureFreq();}
 		PcbPtr Ai = PCBAllocateSpace();
 		PcbPtr Bi = PCBAllocateSpace();
 		PCBConstructor(Ai, mutrecA, Bi);
@@ -876,8 +876,8 @@ void cpu() {
 		}
 
 
-		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
-		{
+//		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
+//		{
 			/******************************************
 			 *		Checking Mutual Resource User
 			 ******************************************/
@@ -908,7 +908,7 @@ void cpu() {
 					continue;
 				}
 			}
-		}
+//		}
 
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
