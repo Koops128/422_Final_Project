@@ -376,6 +376,167 @@ There was no deadlock in this run of the simulation.
 End of simulation
 
 
+10 runs with deadlock:
+
+===================Quantum 9099=====================
+Process created: PID: 8093, Priority 0 at 1457767009
+Timer interrupt: PID 5764 was running, 
+---Running S Detector---
+Queue 0 has 645 processes, head ran 4088 quanta ago
+Queue 1 has 6945 processes, head ran 8244 quanta ago
+Queue 2 has 203 processes, head ran 2009 quanta ago
+Queue 3 has 210 processes, head ran 6665 quanta ago
+Starvation detected. After not running for 8244 cycles, with 8093 processes in readyqueue and threshold 100, PID 789 priority went from 1 to 0.
+Starvation detected. After not running for 6665 cycles, with 8093 processes in readyqueue and threshold 300, PID 2209 priority went from 3 to 2.
+---Exiting S Detector---
+PID 5106 was dispatched
+
+Current Process (PID: 5106, Priority: 0) PC: 122
+Current Process (PID: 5106, Priority: 0) PC: 123
+Current Process (PID: 5106, Priority: 0) PC: 124
+Current Process (PID: 5106, Priority: 0) PC: 125
+Current Process (PID: 5106, Priority: 0) PC: 126
+Current Process (PID: 5106, Priority: 0) PC: 127
+Current Process (PID: 5106, Priority: 0) PC: 128
+Current Process (PID: 5106, Priority: 0) PC: 129
+
+Deadlock detected for processes PID: 2
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8093
+End of simulation
+
+===================Quantum 9102=====================
+Process created: PID: 8195, Priority 1 at 1457767063
+Timer interrupt: PID 7345 was running, 
+---Running S Detector---
+Queue 0 has 634 processes, head ran 4129 quanta ago
+Queue 1 has 7003 processes, head ran 7522 quanta ago
+Queue 2 has 199 processes, head ran 1513 quanta ago
+Queue 3 has 245 processes, head ran 5240 quanta ago
+Starvation detected. After not running for 7522 cycles, with 8195 processes in readyqueue and threshold 100, PID 1438 priority went from 1 to 0.
+Starvation detected. After not running for 5240 cycles, with 8195 processes in readyqueue and threshold 300, PID 3541 priority went from 3 to 2.
+---Exiting S Detector---
+PID 7618 was dispatched
+
+Current Process (PID: 7618, Priority: 0) PC: 12
+Current Process (PID: 7618, Priority: 0) PC: 13
+Current Process (PID: 7618, Priority: 0) PC: 14
+Current Process (PID: 7618, Priority: 0) PC: 15
+Current Process (PID: 7618, Priority: 0) PC: 16
+Current Process (PID: 7618, Priority: 0) PC: 17
+
+Deadlock detected for processes PID: 3
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8195
+End of simulation
+
+===================Quantum 9105=====================
+Process created: PID: 8068, Priority 1 at 1457767086
+Timer interrupt: PID 3217 was running, 
+---Running S Detector---
+Queue 0 has 611 processes, head ran 4048 quanta ago
+Queue 1 has 6856 processes, head ran 3863 quanta ago
+Queue 2 has 213 processes, head ran 6460 quanta ago
+Queue 3 has 257 processes, head ran 299 quanta ago
+Starvation detected. After not running for 3863 cycles, with 8068 processes in readyqueue and threshold 100, PID 4642 priority went from 1 to 0.
+Starvation detected. After not running for 6460 cycles, with 8068 processes in readyqueue and threshold 200, PID 2357 priority went from 2 to 1.
+---Exiting S Detector---
+PID 7269 was dispatched
+
+Current Process (PID: 7269, Priority: 0) PC: 23
+Current Process (PID: 7269, Priority: 0) PC: 24
+Current Process (PID: 7269, Priority: 0) PC: 25
+
+Deadlock detected for processes PID: 4
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8068
+End of simulation
+
+===================Quantum 9097=====================
+Process created: PID: 8122, Priority 1 at 1457767098
+Timer interrupt: PID 1393 was running, 
+---Running S Detector---
+Queue 0 has 679 processes, head ran 349 quanta ago
+Queue 1 has 6920 processes, head ran 9040 quanta ago
+Queue 2 has 220 processes, head ran 4003 quanta ago
+Queue 3 has 227 processes, head ran 8643 quanta ago
+Starvation detected. After not running for 9040 cycles, with 8122 processes in readyqueue and threshold 100, PID 70 priority went from 1 to 0.
+Starvation detected. After not running for 8643 cycles, with 8122 processes in readyqueue and threshold 300, PID 428 priority went from 3 to 2.
+---Exiting S Detector---
+PID 836 was dispatched
+
+Current Process (PID: 836, Priority: 0) PC: 195
+Current Process (PID: 836, Priority: 0) PC: 196
+Current Process (PID: 836, Priority: 0) PC: 197
+Current Process (PID: 836, Priority: 0) PC: 198
+Current Process (PID: 836, Priority: 0) PC: 199
+Current Process (PID: 836, Priority: 0) PC: 200
+
+Current Process (PID: 836, Priority: 0) PC: 1
+
+Deadlock detected for processes PID: 2
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8122
+End of simulation
+
+===================Quantum 9097=====================
+Timer interrupt: PID 3698 was running, 
+---Running S Detector---
+Queue 0 has 670 processes, head ran 4048 quanta ago
+Queue 1 has 6912 processes, head ran 7463 quanta ago
+Queue 2 has 208 processes, head ran 201 quanta ago
+Queue 3 has 229 processes, head ran 4741 quanta ago
+Starvation detected. After not running for 7463 cycles, with 8089 processes in readyqueue and threshold 100, PID 1453 priority went from 1 to 0.
+Starvation detected. After not running for 201 cycles, with 8089 processes in readyqueue and threshold 200, PID 7899 priority went from 2 to 1.
+Starvation detected. After not running for 4741 cycles, with 8089 processes in readyqueue and threshold 300, PID 3830 priority went from 3 to 2.
+---Exiting S Detector---
+PID 1862 was dispatched
+
+Current Process (PID: 1862, Priority: 0) PC: 7
+Current Process (PID: 1862, Priority: 0) PC: 8
+Current Process (PID: 1862, Priority: 0) PC: 9
+Current Process (PID: 1862, Priority: 0) PC: 10
+
+Deadlock detected for processes PID: 3
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8089
+End of simulation
+
+===================Quantum 9100=====================
+Timer interrupt: PID 6742 was running, 
+---Running S Detector---
+Queue 0 has 690 processes, head ran 358 quanta ago
+Queue 1 has 6991 processes, head ran 3876 quanta ago
+Queue 2 has 204 processes, head ran 205 quanta ago
+Queue 3 has 256 processes, head ran 9095 quanta ago
+Starvation detected. After not running for 3876 cycles, with 8243 processes in readyqueue and threshold 100, PID 4731 priority went from 1 to 0.
+Starvation detected. After not running for 205 cycles, with 8243 processes in readyqueue and threshold 200, PID 8062 priority went from 2 to 1.
+Starvation detected. After not running for 9095 cycles, with 8243 processes in readyqueue and threshold 300, PID 26 priority went from 3 to 2.
+---Exiting S Detector---
+PID 7918 was dispatched
+
+Current Process (PID: 7918, Priority: 0) PC: 1
+Current Process (PID: 7918, Priority: 0) PC: 2
+Current Process (PID: 7918, Priority: 0) PC: 3
+Current Process (PID: 7918, Priority: 0) PC: 4
+Current Process (PID: 7918, Priority: 0) PC: 5
+Current Process (PID: 7918, Priority: 0) PC: 6
+Current Process (PID: 7918, Priority: 0) PC: 7
+
+Deadlock detected for processes PID: 3
+>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<
+This run of the simulation had deadlock.
+Total Processes: 8243
+End of simulation
+
+
+
+
 
 Deadlock is when a process owns a lock on another process that owns a lock on the original process. To detect deadlock, we checked each process that owned a lock. We would check if that lock was on a process that also owned a lock. If that lock was on the original process, that meant deadlock. If not, there was no deadlock.
 
