@@ -19,18 +19,18 @@
 #define LOCK_UNBLOCK 		6
 #define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 	0			//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_MUT_REC_PAIRS 	10			//The number of pairs of processes with two mutexes blocking critical section
 #define NUM_PRO_CON_PAIRS	1
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
-#define MAX_COMP_INTENS_PCBS 25
-#define MAX_IO_PROCESSES 50
+//~ #define MAX_COMP_INTENS_PCBS 25
+//~ #define MAX_IO_PROCESSES 50
 
-#define NEW_PROCS		2				// max num new processes to make per quantum
+#define NEW_PROCS		5				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	100000//100000 	// the number of instructions to execute before the simulation may end
 
-#define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
+#define DEADLOCK	1//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
 #define P0_FREQ 5				// frequency (as a percentage) of priority 0 processes
@@ -48,6 +48,7 @@ unsigned int sysStackPC;
 unsigned int currQuantum;
 PcbPtr currProcess;
 PcbPtr idleProcess;
+int deadlockDetected;
 
 MutexPtr mutexes[NUM_MUTEXES];
 CondVarPtr condVars[NUM_PRO_CON_PAIRS * 2];
@@ -237,7 +238,7 @@ int comp_intes_pcbs = 0;
 int ensureFreq()
 {
 	int randNum = (rand() % 100) + 1;
-	if(randNum <= P0_FREQ && comp_intes_pcbs < MAX_COMP_INTENS_PCBS)
+	if(randNum <= P0_FREQ) //&& comp_intes_pcbs < MAX_COMP_INTENS_PCBS)
 	{
 		comp_intes_pcbs++;
 		return 0;
@@ -263,10 +264,10 @@ void genProcesses() {
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
-		if (io_processes > MAX_IO_PROCESSES) {
-		 	return;
-		}
-		io_processes++;
+		//~ if (io_processes > MAX_IO_PROCESSES) {
+		 	//~ return;
+		//~ }
+		//~ io_processes++;
 		PcbPtr newProc = PCBConstructor(PCBAllocateSpace(), none, NULL);
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
@@ -476,7 +477,7 @@ void checkTimerInterrupt() {
 		currQuantum++;
 		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
 		//TODO comment back in (commented out for simplicity to see how stuff works)
-		//genProcesses();
+		genProcesses();
 		if (currProcess != idleProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
@@ -749,11 +750,10 @@ PcbPtr isLocked(PcbPtr owner) {
  */
 int checkLock(PcbPtr owner) {
 	PcbPtr parent = isLocked(owner);
-	PcbPtr originalParent = parent;
 	while (parent != NULL) {//check what its locked by repeatedly
 		if (owner == parent) { //locked by lock itself is locking
-			printf("\r\nDeadlock detected for processes PID: %d and PID: %d",
-					PCBGetID(owner), PCBGetID(originalParent));
+			printf("\r\nDeadlock detected for processes PID: %d", PCBGetID(owner));
+			deadlockDetected = 1;
 			return 1;
 		}
 		parent = isLocked(parent);//else check what that pcb is locked by
@@ -913,6 +913,7 @@ void cpu() {
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
 				printf("\r\n>>>>>Deadlock detected!!!!!!!!!!!!!<<<<<<\r\n");
+				deadlockDetected = 1;
 			}
 		}
 
@@ -928,6 +929,7 @@ int main(void) {
 	sysStackPC = 0;
 	timerCount = TIMER_QUANTUM;
 	currQuantum = 0;
+	deadlockDetected = 0;
 
 	newProcesses = fifoQueueConstructor();
 	readyProcesses = pqConstructor();
@@ -948,6 +950,15 @@ int main(void) {
 		printf("Process created: PID: %d priority: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess));
 		genIdle();
 		cpu();
+	}
+	
+	if(deadlockDetected)
+	{
+		printf("This run of the simulation had deadlock.\n");
+	}
+	else
+	{
+		printf("There was no deadlock in this run of the simulation.\n");
 	}
 
 //	free all the things!
