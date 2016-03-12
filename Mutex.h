@@ -46,7 +46,7 @@ void MutexDestructor(MutexPtr* mutex);
 
 /** Returns 1 if successful, 0 if put into the waiting queue.*/
 int MutexLock(MutexPtr mutex, PcbPtr pcb);
-void MutexUnlock(MutexPtr mutex, PcbPtr pcb);
+PcbPtr MutexUnlock(MutexPtr mutex, PcbPtr pcb);
 int MutexHasWaiting(MutexPtr mutex);
 
 #endif
