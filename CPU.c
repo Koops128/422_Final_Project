@@ -19,8 +19,8 @@
 #define LOCK_UNBLOCK 		6
 #define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 	0			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	1
+#define NUM_MUT_REC_PAIRS 	1			//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_PRO_CON_PAIRS	5
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 #define MAX_COMP_INTENS_PCBS 25
 #define MAX_IO_PROCESSES 50
@@ -738,8 +738,11 @@ PcbPtr isLocked(PcbPtr owner) {
  */
 int checkLock(PcbPtr owner) {
 	PcbPtr parent = isLocked(owner);
+	PcbPtr originalParent = parent;
 	while (parent != NULL) {//check what its locked by repeatedly
 		if (owner == parent) { //locked by lock itself is locking
+			printf("\r\nDeadlock detected for processes PID: %d and PID: %d",
+					PCBGetID(owner), PCBGetID(originalParent));
 			return 1;
 		}
 		parent = isLocked(parent);//else check what that pcb is locked by
@@ -750,23 +753,17 @@ int checkLock(PcbPtr owner) {
 /**
  * Returns 1 if true 0 otherwise
  */
-/**
- * Returns 1 if true 0 otherwise
- */
 int deadlockDetect() {
 	int i, f, r = 0;
 	for (i = 0; i < NUM_MUTEXES; i++) {
 		if (mutexes[i] && mutexes[i]->owner != NULL) {
 			f = checkLock(mutexes[i]->owner);
 			if (f == 1) {
-				printf("\r\nDeadlock detected for process %d", PCBGetID(mutexes[i]->owner));
-				r = 1;
+				return 1;
 			}
 		}
 	}
-	if (!r) {
-		printf("\r\nno deadlock detected\r\n");
-	}
+	printf("\r\nno deadlock detected\r\n");
 	return r;
 }
 
