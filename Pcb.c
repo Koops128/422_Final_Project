@@ -388,9 +388,9 @@ void ProdConsProduce(PcbPtr Producer) {
 }
 
 void ProdConsConsume(PcbPtr Consumer) {
-	int* popped = 0;
-	popCQ(Consumer->ProConData->buffer, popped);
-	printf("Consumer PID %d consumed value %d, buffer availability: %d\n", Consumer->PID, *popped,
+	int popped = 0;
+	popCQ(Consumer->ProConData->buffer, &popped);
+	printf("Consumer PID %d consumed value %d, buffer availability: %d\n", Consumer->PID, popped,
 			bufAvailCQ(Consumer->ProConData->buffer));
 }
 
