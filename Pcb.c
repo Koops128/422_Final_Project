@@ -210,10 +210,6 @@ PcbPtr PCBConstructor(PcbPtr pcb, RelationshipType theType, PcbPtr partner) {
 		pcb->mRelation.pcSteps = (PCStepsPtr) malloc(sizeof(ProdConsStepsStr));
 		pcb->ProConData = (PCDataPtr) malloc(sizeof(PCDataStr));
 		pcb->ProConData->sharedData = 0;
-
-////		setPCTraps(pcb->mRelation.pcSteps->lock, pcb->mRelation.pcSteps->unlock,
-////				pcb->mRelation.pcSteps->wait, pcb->mRelation.pcSteps->signal,
-////				pcb->IO_1_Traps, pcb->IO_2_Traps);
 	}
 
 	if (theType != mutrecA && theType != mutrecB && theType != producer && theType != consumer) {
@@ -385,14 +381,17 @@ PCDataPtr PCBGetPCData(PcbPtr pcb) {
 
 void ProdConsProduce(PcbPtr Producer) {
 	pushCQ(Producer->ProConData->buffer, Producer->ProConData->sharedData);
-	printf("Producer PID %d produced value %d", Producer->PID, Producer->ProConData->sharedData);
+	printf("Producer PID %d produced value %d, buffer availability: %d\n\n",
+			Producer->PID, Producer->ProConData->sharedData,
+			bufAvailCQ(Producer->ProConData->buffer));
 	Producer->ProConData->sharedData++;
 }
 
 void ProdConsConsume(PcbPtr Consumer) {
 	int* popped = 0;
 	popCQ(Consumer->ProConData->buffer, popped);
-	printf("Consumer PID %d consumed value %d", Consumer->PID, *popped);
+	printf("Consumer PID %d consumed value %d, buffer availability: %d\n", Consumer->PID, *popped,
+			bufAvailCQ(Consumer->ProConData->buffer));
 }
 
 /*********************************************************************************/
@@ -661,7 +660,7 @@ char *PCBToString(PcbStr* pcb) {
 ////	}
 //}
 
-////test pcb
+//test pcb
 //int main(void) {
 //	srand(time(NULL));
 //	PcbStr* pcb = PCBConstructor(0);
