@@ -657,6 +657,7 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			PcbPtr newMutexOwner = MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
 			if (newMutexOwner) {
 				pqEnqueue(readyProcesses, newMutexOwner);
+				PCBSetState(newMutexOwner, ready);
 			}
 			break;
 		case signalTrap :
