@@ -19,8 +19,8 @@
 #define LOCK_UNBLOCK 		6
 #define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 	1			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	5
+#define NUM_MUT_REC_PAIRS 	0			//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_PRO_CON_PAIRS	1
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
 #define MAX_COMP_INTENS_PCBS 25
 #define MAX_IO_PROCESSES 50
@@ -634,7 +634,7 @@ ProdConsTrapType checkProdConsRequest() {
 }
 
 int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
-	printf("Producer/Consumer trap request: ");
+	printf("PID %d: Producer/Consumer trap request: ", PCBGetID(currProcess));
 
 	saveCpuToPcb();
 	PCBSetState(currProcess, blocked);
@@ -679,23 +679,32 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 
 			break;
 		case waitTrap :
-			printf("wait trap\n");
+			printf("wait trap; buffer availability: %d\n", bufAvailCQ(PCBProdConsGetBuffer(currProcess)));
 
 			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
 
-			if (PCBgetPairType(currProcess) == producer
-					&& bufFull(PCBProdConsGetBuffer(currProcess))) {
-				CondVarWait(condVars[PCBProdConsGetBufNotFull(currProcess)],
-						    mutexes[PCBProdConsGetMutex(currProcess)],
-						    currProcess);
-				scheduler(PRO_CON_INTERRUPT);
-				contextSwitch = 1;
-			} else if (bufEmpty(PCBProdConsGetBuffer(currProcess))){
-				CondVarWait(condVars[PCBProdConsGetBufNotEmpty(currProcess)],
-										    mutexes[PCBProdConsGetMutex(currProcess)],
-										    currProcess);
-				scheduler(PRO_CON_INTERRUPT);
-				contextSwitch = 1;
+			if (PCBgetPairType(currProcess) == producer) {
+				if(bufFull(PCBProdConsGetBuffer(currProcess))) {
+					CondVarWait(condVars[PCBProdConsGetBufNotFull(currProcess)],
+							mutexes[PCBProdConsGetMutex(currProcess)],
+						    	currProcess);
+					scheduler(PRO_CON_INTERRUPT);
+					contextSwitch = 1;
+				} else {
+					printf("PID %d, does not need to wait.", PCBGetID(currProcess));
+				}
+			}
+
+			if (PCBgetPairType(currProcess) == consumer) {
+				if (bufEmpty(PCBProdConsGetBuffer(currProcess))){
+					CondVarWait(condVars[PCBProdConsGetBufNotEmpty(currProcess)],
+							    mutexes[PCBProdConsGetMutex(currProcess)],
+							    currProcess);
+					scheduler(PRO_CON_INTERRUPT);
+					contextSwitch = 1;
+				} else {
+					printf("PID %d, does not need to wait.");
+				}
 			}
 			break;
 		default:
