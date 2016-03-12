@@ -144,24 +144,22 @@ void runStarvationDetector() {
 		if (fq) {
 			PcbPtr pcb = fifoQueuePeek(fq);
 			if (pcb) {
+				int threshold = 100*i;
+				int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
 				//test if should be demoted
-				if (i < (PRIORITY_LEVELS -1) && PCBGetStarveBoostFlag(pcb)) {
+				if (i < (PRIORITY_LEVELS -1) && PCBGetStarveBoostFlag(pcb) && threshold < cyclesSinceRan) {
 					//toggle flag and demote to lower level.
 					PCBSetPriority(pcb, i + 1);
 					PCBSetStarveBoostFlag(pcb, 0);
 					pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
-				}				//	Test if should be promoted
-				else if (i > 0 && !PCBGetStarveBoostFlag(pcb)) {
-					int threshold = 100*i;
-					int cyclesSinceRan = currQuantum - PCBGetLastQuantum(pcb);
-					if (cyclesSinceRan > threshold ) {
-						PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
-						PCBSetStarveBoostFlag(pcb, 1);
-						pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
+				}			//	Test if should be promoted
+				else if (i > 0 && !PCBGetStarveBoostFlag(pcb) && threshold < cyclesSinceRan) {
+					PCBSetPriority(pcb, i - 1); //lower priority number = higher priority
+					PCBSetStarveBoostFlag(pcb, 1);
+					pqEnqueue(readyProcesses, fifoQueueDequeue(fq));
 
-						printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue and threshold %d, PID %d priority went from %d to %d.\n",
-								cyclesSinceRan, numProcs, threshold, PCBGetID(pcb), i, i-1);
-					}
+					printf("Starvation detected. After not running for %d cycles, with %d processes in readyqueue and threshold %d, PID %d priority went from %d to %d.\n",
+							cyclesSinceRan, numProcs, threshold, PCBGetID(pcb), i, i-1);
 				}
 			}
 		}
@@ -873,27 +871,31 @@ void cpu() {
 			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
 		}
 
-		/******************************************
-		 *		Checking Mutual Resource User
-		 ******************************************/
+
 		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
 		{
+			/******************************************
+			 *		Checking Mutual Resource User
+			 ******************************************/
 			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
-			if (!notBlockedByLock()) {
-				//TODO make an isr for this
-				scheduler(BLOCKED_BY_LOCK);
-				simCounter++;
-				continue;
-			} else {
-				PcbPtr wasWaitingPcb = checkUnlock();
-				if (wasWaitingPcb) {
+				if (!notBlockedByLock()) {
 					//TODO make an isr for this
-					pqEnqueue(readyProcesses, wasWaitingPcb);
+					scheduler(BLOCKED_BY_LOCK);
+					simCounter++;
+					continue;
+				} else {
+					PcbPtr wasWaitingPcb = checkUnlock();
+					if (wasWaitingPcb) {
+						//TODO make an isr for this
+						pqEnqueue(readyProcesses, wasWaitingPcb);
+					}
 				}
-			}
 
-			printIfInCriticalSection();
+				printIfInCriticalSection();
 
+			/******************************************
+			 *		Checking Prod Cons Pairs
+			 ******************************************/
 			} else if (PCBgetPairType(currProcess) == producer || PCBgetPairType(currProcess) == consumer) {
 				ProdConsTrapType trapRequest = checkProdConsRequest();
 				if ((trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap)
