@@ -654,7 +654,10 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			printf("unlock trap\n");
 
 			//if unlock, then call the pair's mutex to unlock
-			MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
+			PcbPtr newMutexOwner = MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
+			if (newMutexOwner) {
+				pqEnqueue(readyProcesses, newMutexOwner);
+			}
 			break;
 		case signalTrap :
 			printf("signal trap\n");
@@ -701,7 +704,7 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 					scheduler(PRO_CON_INTERRUPT);
 					contextSwitch = 1;
 				} else {
-					printf("PID %d, does not need to wait.");
+					printf("PID %d, does not need to wait.", PCBGetID(currProcess));
 				}
 			}
 			break;
