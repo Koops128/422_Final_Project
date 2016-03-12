@@ -1,0 +1,1 @@
+Deadlock is when a process owns a lock on another process that owns a lock on the original process. To detect deadlock, we checked each process that owned a lock. We would check if that lock was on a process that also owned a lock. If that lock was on the original process, that meant deadlock. If not, there was no deadlock.
