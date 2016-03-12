@@ -960,6 +960,8 @@ int main(void) {
 	{
 		printf("There was no deadlock in this run of the simulation.\n");
 	}
+	
+	printf("Total Processes: %d\n", PCBGetID(currProcess));
 
 //	free all the things!
 	fifoQueueDestructor(&newProcesses);
