@@ -935,6 +935,7 @@ int main(void) {
 	pqDestructor(readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
+	IODeviceDestructor(device1);
 	IODeviceDestructor(device2);
 
 	printf("End of simulation\n");
