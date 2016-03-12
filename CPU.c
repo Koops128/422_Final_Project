@@ -19,17 +19,16 @@
 #define LOCK_UNBLOCK 		6
 #define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 	1			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	5
+#define NUM_MUT_REC_PAIRS 	0			//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_PRO_CON_PAIRS	1
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
-
 #define MAX_COMP_INTENS_PCBS 25
 #define MAX_IO_PROCESSES 50
 
-#define NEW_PROCS		6				// max num new processes to make per quantum
+#define NEW_PROCS		2				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
 #define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	10000//100000 	// the number of instructions to execute before the simulation may end
+#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
 
 #define DEADLOCK	0//1			//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
@@ -232,7 +231,6 @@ void scheduler(int interruptType) {
 /*=================================================
  *				Process Generation
  *=================================================*/
-
 int comp_intes_pcbs = 0;
 /**
  * Ensures that priority levels only occur a certain percentage of the time.
@@ -261,7 +259,6 @@ int ensureFreq()
 }
 
 int io_processes = 0;
-
 /*Randomly generates between 0 and <NEW_PROCS> new processes and enqueues them to the New Processes Queue.*/
 void genProcesses() {
 	int i;
@@ -269,7 +266,7 @@ void genProcesses() {
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
 		if (io_processes > MAX_IO_PROCESSES) {
-			return;
+		 	return;
 		}
 		io_processes++;
 		PcbPtr newProc = PCBConstructor(PCBAllocateSpace(), none, NULL);
@@ -394,7 +391,7 @@ void genProducerConsumerPairs() {
 		PCBProdConsSetCondVars(Producer, condVarID1, condVarID2);
 		PCBProdConsSetBuffer(Producer, buffer);
 		initializeTrapArray(Producer);
-		printf("Producer process created: PID: %d at %lu\r\n", PCBGetID(Producer), PCBGetCreation(Producer));
+		printf("Producer process created: PID: %d priority: %d\r\n", PCBGetID(Producer), PCBGetPriority(Producer));
 
 		PCBConstructor(Consumer, consumer, Producer);
 		currPID++;
@@ -404,7 +401,7 @@ void genProducerConsumerPairs() {
 		PCBProdConsSetCondVars(Consumer, condVarID1, condVarID2);
 		PCBProdConsSetBuffer(Consumer, buffer);
 		initializeTrapArray(Consumer);
-		printf("Consumer process created: PID: %d at %lu\r\n", PCBGetID(Consumer), PCBGetCreation(Consumer));
+		printf("Consumer process created: PID: %d priority: %d\r\n", PCBGetID(Consumer), PCBGetPriority(Consumer));
 
 		addMutex++;
 
@@ -481,7 +478,7 @@ void checkTimerInterrupt() {
 		currQuantum++;
 		printf("\r\n===================Quantum %d=====================\r\n", currQuantum);
 		//TODO comment back in (commented out for simplicity to see how stuff works)
-		genProcesses();
+		//genProcesses();
 		if (currProcess != idleProcess) {
 			printf("Timer interrupt: PID %d was running, ", PCBGetID(currProcess));
 		} else {
@@ -598,16 +595,19 @@ int checkIORequest(int devnum) {
 	return requestMade;
 }
 
-void checkIOTraps() {
-	if (currProcess && checkIORequest(1) != 0) {
+//returns 1 if context switch, 0 if not
+int checkIOTraps() {
+	int contextSwitch = 0;
+	if (currProcess != idleProcess && checkIORequest(1)) {
 		printf("I/O trap request: I/O device 1, ");
 		IOTrapHandler(device1);
-	}
-
-	if (currProcess && checkIORequest(2) != 0) {
+		contextSwitch = 1;
+	}else if (currProcess != idleProcess && checkIORequest(2)) {
 		printf("I/O trap request: I/O device 2, ");
 		IOTrapHandler(device2);
+		contextSwitch = 1;
 	}
+	return contextSwitch;
 }
 
 ProdConsTrapType checkProdConsRequest() {
@@ -634,7 +634,7 @@ ProdConsTrapType checkProdConsRequest() {
 }
 
 int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
-	printf("ProdConsTrapHandler trapRequest: %d\n", trapRequest);
+	printf("Producer/Consumer trap request: ");
 
 	saveCpuToPcb();
 	PCBSetState(currProcess, blocked);
@@ -643,6 +643,8 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 	PcbPtr notWaitingAnymore = NULL;
 	switch(trapRequest) {
 		case lockTrap :
+			printf("lock trap\n");
+
 			//if lock, then call the pair's mutex for a lock.  If it needs to wait for the lock,
 			//then call the scheduler with an interrupt
 			if(!MutexLock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess)) {
@@ -651,10 +653,14 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 			}
 			break;
 		case unlockTrap :
+			printf("unlock trap\n");
+
 			//if unlock, then call the pair's mutex to unlock
 			MutexUnlock(mutexes[PCBGetPCData(currProcess)->mutex], currProcess);
 			break;
 		case signalTrap :
+			printf("signal trap\n");
+
 			//if signal, then call ProConSignal, if a PCB is returned, then put it in the ready queue
 
 			//if producer call produce method, else call consumer method, then call signal
@@ -673,6 +679,8 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 
 			break;
 		case waitTrap :
+			printf("wait trap\n");
+
 			//if wait, then call ProConWait, if the process needs to wait, then call the scheduler with an interrupt
 
 			if (PCBgetPairType(currProcess) == producer
@@ -682,7 +690,7 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
 						    currProcess);
 				scheduler(PRO_CON_INTERRUPT);
 				contextSwitch = 1;
-			} else if (PCBProdConsGetBuffer(currProcess)){
+			} else if (bufEmpty(PCBProdConsGetBuffer(currProcess))){
 				CondVarWait(condVars[PCBProdConsGetBufNotEmpty(currProcess)],
 										    mutexes[PCBProdConsGetMutex(currProcess)],
 										    currProcess);
@@ -849,9 +857,9 @@ void cpu() {
 		 * we can safely increment the sys stack pc.  **/
 		sysStackPC++;
 
-		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
+		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess && checkIOTraps())
 		{
-			checkIOTraps();
+			continue;
 		}
 
 		//TODO delete this when done debugging.
@@ -925,7 +933,7 @@ int main(void) {
 		PCBSetPriority(currProcess, ensureFreq());
 		PCBSetState(currProcess, running);
 		PCBSetLastQuantum(currProcess, currQuantum);
-		printf("Process created: PID: %d at %lu\r\n", PCBGetID(currProcess), PCBGetCreation(currProcess));
+		printf("Process created: PID: %d priority: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess));
 		genIdle();
 		cpu();
 	}
