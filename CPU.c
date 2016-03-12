@@ -750,9 +750,11 @@ PcbPtr isLocked(PcbPtr owner) {
  */
 int checkLock(PcbPtr owner) {
 	PcbPtr parent = isLocked(owner);
+	PcbPtr originalParent = parent;
 	while (parent != NULL) {//check what its locked by repeatedly
 		if (owner == parent) { //locked by lock itself is locking
-			printf("\r\nDeadlock detected for processes PID: %d", PCBGetID(owner));
+			printf("\r\nDeadlock detected for processes PID: %d and PID: %d",
+					PCBGetID(owner), PCBGetID(originalParent));
 			deadlockDetected = 1;
 			return 1;
 		}
@@ -760,6 +762,7 @@ int checkLock(PcbPtr owner) {
 	}
 	return 0; //pcb is not locked, chain is done
 }
+
 
 /**
  * Returns 1 if true 0 otherwise
