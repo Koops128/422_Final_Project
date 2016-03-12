@@ -20,8 +20,11 @@
 #define PRO_CON_INTERRUPT	7
 
 #define NUM_MUT_REC_PAIRS 	1			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	1
+#define NUM_PRO_CON_PAIRS	5
 #define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
+
+#define MAX_COMP_INTENS_PCBS 25
+#define MAX_IO_PROCESSES 50
 
 #define NEW_PROCS		6				// max num new processes to make per quantum
 #define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
@@ -230,6 +233,7 @@ void scheduler(int interruptType) {
  *				Process Generation
  *=================================================*/
 
+int comp_intes_pcbs = 0;
 /**
  * Ensures that priority levels only occur a certain percentage of the time.
  * Returns the priority level based on desired frequency (defined at the top of this file).
@@ -237,8 +241,9 @@ void scheduler(int interruptType) {
 int ensureFreq()
 {
 	int randNum = (rand() % 100) + 1;
-	if(randNum <= P0_FREQ)
+	if(randNum <= P0_FREQ && comp_intes_pcbs < MAX_COMP_INTENS_PCBS)
 	{
+		comp_intes_pcbs++;
 		return 0;
 	}
 	else if(randNum <= P1_FREQ)
@@ -255,12 +260,18 @@ int ensureFreq()
 	}
 }
 
+int io_processes = 0;
+
 /*Randomly generates between 0 and <NEW_PROCS> new processes and enqueues them to the New Processes Queue.*/
 void genProcesses() {
 	int i;
 	// rand() % NEW_PROCS will range from 0 to NEW_PROCS - 1, so we must use rand() % (NEW_PROCS + 1)
 	for(i = 0; i < rand() % (NEW_PROCS + 1); i++)
 	{
+		if (io_processes > MAX_IO_PROCESSES) {
+			return;
+		}
+		io_processes++;
 		PcbPtr newProc = PCBConstructor(PCBAllocateSpace(), none, NULL);
 		if(newProc != NULL)	// Remember to call the destructor when finished using newProc
 		{
@@ -924,7 +935,6 @@ int main(void) {
 	pqDestructor(readyProcesses);
 	fifoQueueDestructor(&terminatedProcesses);
 
-	IODeviceDestructor(device1);
 	IODeviceDestructor(device2);
 
 	printf("End of simulation\n");
