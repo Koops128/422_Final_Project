@@ -21,4 +21,6 @@ void pushCQ(cQPtr q, int val);
 
 int popCQ(cQPtr q, int* storage);
 
+int bufAvailCQ(cQPtr q);
+
 #endif /* CQ_H_ */
