@@ -496,7 +496,7 @@ void IO_ISR(int numIO) { //IOCompletionHandler
 		PCBSetState(currProcess, interrupted);
 	}
 	//Get process from IO waiting queue
-	PcbPtr pcb;
+	PcbPtr pcb = NULL;
 	if (numIO == 1) {
 		pcb = fifoQueueDequeue(device1->waitQ);
 		if (device1->waitQ->size > 0) {
@@ -796,7 +796,7 @@ int notBlockedByLock() {
 		int index = PCBGetMutexIndex(currProcess, 2) % (NUM_MUTEXES);
 		selected = mutexes[index];
 	}
-	if (selected) {
+	if (selected && selected->owner != currProcess) {
 		notBlocked = MutexLock(selected, currProcess); //Wants lock; result depends on whether it was blocked.
 	} else {
 		notBlocked = 1; //Didn't want lock
