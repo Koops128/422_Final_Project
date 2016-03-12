@@ -43,6 +43,10 @@ void pushCQ(cQPtr q, int val) {
 	}
 }
 
+int bufAvailCQ(cQPtr q) {
+	return q->bufavail;
+}
+
 /*Puts popped value into storage upon success. Success is indicated by return value, which is
  * < 0 upon failure, 0 upon success.*/
 int popCQ(cQPtr q, int* storage) {
@@ -59,6 +63,10 @@ int popCQ(cQPtr q, int* storage) {
 /*Tests*/
 //int main(void) {
 //	cQPtr q = makeCQ(4);
+//
+//	printf("beginning Buf full? %d\n", bufFull(q));
+//	printf("beginning Buf empty? %d\n", bufEmpty(q));
+//
 //	int i;
 //	for(i=0; i < 6; i++) {
 //		pushCQ(q, i);
