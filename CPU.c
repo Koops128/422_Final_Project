@@ -7,10 +7,6 @@
 #include "Mutex.h"
 #include "CondVar.h"
 
-//typedef enum interruptType {
-//	TIMER, TERMINATE, IO_REQUEST, IO_COMPLETION, LOCK_BLOCK, LOCK_UNBLOCK
-//} interruptType;
-
 #define TIMER_INTERRUPT 	1
 #define TERMINATE_INTERRUPT 2
 #define IO_REQUEST 			3
@@ -19,21 +15,19 @@
 #define LOCK_UNBLOCK 		6
 #define PRO_CON_INTERRUPT	7
 
-#define NUM_MUT_REC_PAIRS 	10			//The number of pairs of processes with two mutexes blocking critical section
-#define NUM_PRO_CON_PAIRS	0
-#define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //each pair has two mutexes
-//~ #define MAX_COMP_INTENS_PCBS 25
-//~ #define MAX_IO_PROCESSES 50
+#define NUM_MUT_REC_PAIRS 	10		//The number of pairs of processes with two mutexes blocking critical section
+#define NUM_PRO_CON_PAIRS	5
+#define NUM_MUTEXES		  NUM_PRO_CON_PAIRS + NUM_MUT_REC_PAIRS * 2 //(one mutex per prod cons pair) + (two mutexes per mut rec pair)
 
-#define NEW_PROCS		2				// max num new processes to make per quantum
-#define TIMER_QUANTUM 	10//500			//deliberately shrank since last assignment to increase potential for race conditions.
-#define ROUNDS_TO_PRINT 4 				// the number of rounds to wait before printing simulation data
-#define SIMULATION_END 	1000//100000 	// the number of instructions to execute before the simulation may end
+#define NEW_PROCS		2			// max num new processes to make per quantum
+#define TIMER_QUANTUM 	10//500		//deliberately shrank since last assignment to increase potential for race conditions.
+#define ROUNDS_TO_PRINT 4 			// the number of rounds to wait before printing simulation data
+#define SIMULATION_END 	100000 		// the number of instructions to execute before the simulation may end
 
-#define DEADLOCK	1//1			//Whether to do deadlock. 0 - no. 1 - yes.
+#define DEADLOCK	1				//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
-#define P0_FREQ 5				// frequency (as a percentage) of priority 0 processes
+#define P0_FREQ 5					// frequency (as a percentage) of priority 0 processes
 #define P1_FREQ P0_FREQ + 80
 #define P2_FREQ P1_FREQ + 10
 #define P3_FREQ P2_FREQ + 5
@@ -110,7 +104,7 @@ void dispatcher() {
 	}
 }
 
-//TODO look at starvation test print statements before submitting
+
 /*=================================================
  *				Starvation Detection
  *=================================================*/
@@ -126,13 +120,13 @@ void dispatcher() {
  *  ones.
  */
 void runStarvationDetector() {
-	//sum up number of processes
+	//sum up number of processes for printing stats
 	int i, numProcs = 0;
 	printf("\n---Running S Detector---\n");
-	numProcs = currPID;
 	int procsPerLevel[PRIORITY_LEVELS];
 	for (i = 0; i < PRIORITY_LEVELS; i++) {
 		procsPerLevel[i] = ((readyProcesses->priorityArray)[i])->size;
+		numProcs += procsPerLevel[i];
 		printf("Queue %d has %d processes, head ran %d quanta ago\n", i, procsPerLevel[i], currQuantum - PCBGetLastQuantum((fifoQueuePeek((readyProcesses->priorityArray)[i]))));
 	}
 
@@ -873,45 +867,42 @@ void cpu() {
 			continue;
 		}
 
-		//TODO delete this when done debugging.
-		if (currProcess != idleProcess) {
-			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
-		}
+//	For debugging:
+//		if (currProcess != idleProcess) {
+//			printf("Current Process (PID: %d, Priority: %d) PC: %d\r\n", PCBGetID(currProcess), PCBGetPriority(currProcess), sysStackPC);
+//		}
 
 
-//		if(!PCBIsComputeIntensive(currProcess) && currProcess != idleProcess)
-//		{
-			/******************************************
-			 *		Checking Mutual Resource User
-			 ******************************************/
-			if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
-				if (!notBlockedByLock()) {
+		/******************************************
+		 *		Checking Mutual Resource User
+		 ******************************************/
+		if (PCBgetPairType(currProcess) == mutrecA || PCBgetPairType(currProcess) == mutrecB) {
+			if (!notBlockedByLock()) {
+				//TODO make an isr for this
+				scheduler(BLOCKED_BY_LOCK);
+				simCounter++;
+				continue;
+			} else {
+				PcbPtr wasWaitingPcb = checkUnlock();
+				if (wasWaitingPcb) {
 					//TODO make an isr for this
-					scheduler(BLOCKED_BY_LOCK);
-					simCounter++;
-					continue;
-				} else {
-					PcbPtr wasWaitingPcb = checkUnlock();
-					if (wasWaitingPcb) {
-						//TODO make an isr for this
-						pqEnqueue(readyProcesses, wasWaitingPcb);
-					}
-				}
-
-				printIfInCriticalSection();
-
-			/******************************************
-			 *		Checking Prod Cons Pairs
-			 ******************************************/
-			} else if (PCBgetPairType(currProcess) == producer || PCBgetPairType(currProcess) == consumer) {
-				ProdConsTrapType trapRequest = checkProdConsRequest();
-				if ((trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap)
-						&& ProdConsTrapHandler(trapRequest)) {
-					simCounter++;
-					continue;
+					pqEnqueue(readyProcesses, wasWaitingPcb);
 				}
 			}
-//		}
+
+			printIfInCriticalSection();
+
+		/******************************************
+		 *		Checking Prod Cons Pairs
+		 ******************************************/
+		} else if (PCBgetPairType(currProcess) == producer || PCBgetPairType(currProcess) == consumer) {
+			ProdConsTrapType trapRequest = checkProdConsRequest();
+			if ((trapRequest == lockTrap || trapRequest == unlockTrap || trapRequest == waitTrap || trapRequest == signalTrap)
+					&& ProdConsTrapHandler(trapRequest)) {
+				simCounter++;
+				continue;
+			}
+		}
 
 		if (simCounter % CHECK_DEADLOCK_FREQUENCY == 0) {
 			if (deadlockDetect()) {
@@ -955,6 +946,8 @@ int main(void) {
 		cpu();
 	}
 	
+	printf("\r\n\r\n============Final Stats=============\r\n");
+
 	if(deadlockDetected)
 	{
 		printf("This run of the simulation had deadlock.\n");
@@ -964,7 +957,8 @@ int main(void) {
 		printf("There was no deadlock in this run of the simulation.\n");
 	}
 	
-	printf("Total Processes: %d\n", currPID);
+	printf("Total Processes created: %d\r\n", currPID);
+	printf("Total Processes terminated: %d\r\n", terminatedProcesses->size);
 
 //	free all the things!
 	fifoQueueDestructor(&newProcesses);
@@ -974,6 +968,6 @@ int main(void) {
 	IODeviceDestructor(device1);
 	IODeviceDestructor(device2);
 
-	printf("End of simulation\n");
+	printf("==========End of simulation=========\r\n");
 	return 0;
 }
