@@ -24,7 +24,7 @@
 #define ROUNDS_TO_PRINT 4 			// the number of rounds to wait before printing simulation data
 #define SIMULATION_END 	100000 		// the number of instructions to execute before the simulation may end
 
-#define DEADLOCK	1				//Whether to do deadlock. 0 - no. 1 - yes.
+#define DEADLOCK	0				//Whether to do deadlock. 0 - no. 1 - yes.
 #define CHECK_DEADLOCK_FREQUENCY 10 //Every number of instructions we run deadlock check
 
 #define P0_FREQ 5					// frequency (as a percentage) of priority 0 processes
@@ -129,6 +129,7 @@ void runStarvationDetector() {
 		numProcs += procsPerLevel[i];
 		printf("Queue %d has %d processes, head ran %d quanta ago\n", i, procsPerLevel[i], currQuantum - PCBGetLastQuantum((fifoQueuePeek((readyProcesses->priorityArray)[i]))));
 	}
+
 
 	//Check head of each priority level (besides top) and see if it needs boosting
 	//Check head of each priority level (except last) and see if it needs to go back to original level.
@@ -723,7 +724,7 @@ int ProdConsTrapHandler(ProdConsTrapType trapRequest) {
  */
 PcbPtr isLocked(PcbPtr owner) {
 	int i, j;
-	for (i = 0; i < NUM_MUTEXES; i++) {
+	for (i = 0; i < (NUM_MUT_REC_PAIRS * 2); i++) {
 		MutexPtr m = mutexes[i];
 		if (m && m->owner != NULL && MutexHasWaiting(m)) {
 			for (j = 0; j < m->waitQ->size; j++) {
@@ -763,7 +764,7 @@ int checkLock(PcbPtr owner) {
  */
 int deadlockDetect() {
 	int i, f, r = 0;
-	for (i = 0; i < NUM_MUTEXES; i++) {
+	for (i = 0; i < (NUM_MUT_REC_PAIRS * 2); i++) {
 		if (mutexes[i] && mutexes[i]->owner != NULL) {
 			f = checkLock(mutexes[i]->owner);
 			if (f == 1) {
